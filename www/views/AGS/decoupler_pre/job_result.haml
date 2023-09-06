@@ -1,0 +1,14 @@
+
+.job_control
+  = workflow_partial('job_result/job_control', workflow, task, locals)
+
+- tsv = result
+= table do
+  - tsv
+- height = tsv.size * 10
+- new = tsv.annotate({})
+- tsv.each do |k,vs|
+  - new[k] = vs.collect{|v| v *= 10; v < -1 ? - Math.log(-v) : (v < 1 ? 0 : Math.log(v)) }
+
+- tsv = new
+= tool :Rpng, :plot => "rbbt.require('pheatmap');pheatmap(data, cluster_cols=FALSE)", :data => tsv, :height => height

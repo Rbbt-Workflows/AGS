@@ -1,0 +1,69 @@
+AGS=/$PWD filter="*.rb *.rake Rakefile *.rdoc *.R *.sh *.js *.haml *.sass *.txt *.conf" {
+ workflow.rb
+ bin=bin filter="*"{
+ }
+ lib=lib {
+  sinatra.rb
+  tasks=AGS/tasks{
+   NTNU.rb
+   gene_counts.rb
+   gene_clusters.rb
+   gene_clusters=gene_clusters{
+    rules.old.rb
+    rules.rb
+   }
+   INSPEcT.rb
+   decoupler.rb
+   benchmarks.rb
+  }
+  knowledge_base=knowledge_base{
+   AGS.rb
+  }
+ }
+ test=test {
+  test_helper.rb
+ }
+ data=data filter="*"{
+  cluster_groups.tsv
+  gene_modules.tsv
+  super_cluster_names.tsv
+  FC=FC{
+   deseq2_log2foldchange_ashrshrink_outliersremoved_untreatedT0asreference_independentfiltering.txt
+   deseq2_pvalue_fdradjusted_outliersremoved_untreatedT0asreference_independentfiltering.txt
+   samples.txt
+  }
+ }
+ www=www{
+  views=views{
+   AGS=AGS{
+    decoupler=decoupler{
+     job_result.haml
+    }
+    decoupler_pre=decoupler_pre{
+     job_result.haml
+    }
+   }
+   entity_list=entity_list{
+    Gene.haml
+    Gene=Gene{
+     heatmap.haml
+     expression.haml
+     decoupler.haml
+     graph.haml
+     over_representation.haml
+    }
+   }
+   entity=entity{
+    Cluster.haml
+    Gene.haml
+    Gene=Gene{
+     expression_profiles.haml
+    }
+   }
+   main=main{
+    clusters.haml
+    profiles.haml
+   }
+  }
+ }
+}

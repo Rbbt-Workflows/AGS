@@ -1,0 +1,37 @@
+- action_card = ActionCard.new do
+  - input :conditions, :array, "Conditions to test"
+  - input :threshold, :float, "Pvalue threshold", 0.1
+
+= action_card_render action_card do
+  - threshold = 0.1 if threshold.nil? || threshold.empty?
+  - threshold = threshold.to_f
+  - conditions = conditions.split("\n") if String === conditions
+  - conditions = [] if conditions.nil? 
+  - conditions = conditions.collect{|c| c.strip }
+
+  - tsvs = {}
+  - tsvs["FC"] = AGS.job(:decoupler, nil, :subset => list, :conditions => conditions, :fc_source => "NTNU", :threshold => threshold).run
+  - tsvs["FC_ONE"] = AGS.job(:decoupler_fc_one, nil, :subset => list, :conditions => conditions, :fc_source => "NTNU", :threshold => threshold).run
+  - tsvs.each do |name,tsv|
+    - new = tsv.annotate({})
+    - tsv.each do |k,vs|
+      - new[k] = vs.collect{|v| v *= 10; v < -1 ? - Math.log(-v) : (v < 1 ? 0 : Math.log(v)) }
+    - tsvs[name] = new
+
+  .ui.grid
+    - tsvs.each do |name,tsv|
+      .ui.basic.segment.eight.columns
+
+        %h3= name
+        - height = tsv.size * 10 + 100
+
+        - begin
+          = tool :Rpng, :plot => "rbbt.require('pheatmap');pheatmap(data, cluster_cols=FALSE)", :data => tsv, :height => height
+        - rescue
+          .ui.error.message 
+            No plot could be produced: #{$!.message}
+
+  - tsvs.each do |name,tsv|
+    %h3= name
+    = table do
+      - tsv

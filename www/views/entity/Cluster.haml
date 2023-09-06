@@ -1,0 +1,56 @@
+- entity_card = EntityCard.new entity
+- name = entity.respond_to?(:name)? entity.name || entity : entity
+
+- if not entity.respond_to?(:long_name)
+  - if entity.respond_to?(:name)
+    - entity_card.name = [entity.base_type, entity] * ": "
+  - else
+    - entity_card.name = entity.base_type
+  - entity_card.long_name = name
+
+- if entity.respond_to? :genes
+  - genes = entity.genes
+  - list_container = ListContainer.new
+  - list_container.add "#{name} #{entity.base_type} genes", genes
+  - entity_card.list_container = list_container
+
+- entity_card.action_controller = default_action_controller entity
+
+= entity_card_render entity_card do
+  - list = entity.genes
+
+  - header 'p-value', "NumericValue"
+  = table :page => "1~p-value" do
+    - require 'rbbt/statistics/hypergeometric'
+    - tsv = ExTRI.job(:pairs_final).produce.path.tsv :type => :flat,
+      :key_field => "Target Gene (Associated Gene Name)",
+      :fields => "Transcription Factor (Associated Gene Name)"
+
+    - tsv.enrichment(list, tsv.fields.first, :cutoff => 0.05)
+
+  - log_time = false unless defined? log_time
+  - tsv = AGS.fold_changes
+  - tsv = tsv.select(list.to(:name))
+  - melt = TSV.setup({}, "ID~Gene,Experiment,Time,Value")
+  - tsv.each do |gene,values|
+    - values.zip(tsv.fields).each do |value, field|
+      - experiment, time = field.split(".")
+      - time = time.scan(/\d+/).first.to_i
+      - experiment = experiment[3..-1]
+      - values = [gene, experiment, time, value]
+      - id = Misc.digest(values*":")
+      - melt[id] = values
+  = tool :Rggplot, :plot => "ggplot(data, aes(x=#{log_time ? "log(Time)" : "Time"}, y=Value, group=Experiment, color=Experiment)) + geom_smooth(aes(fill=Experiment), method='gam', formula=y ~ s(x, bs = 'cs', k=5)) + theme(text = element_text(size = 5))", :data => melt, :size => 3
+
+  - tsv = AGS.fold_changes
+  - tsv = tsv.select(list.to(:name))
+  - height = tsv.length * 10
+
+  - new = tsv.annotate({})
+  - tsv.each do |k,vs|
+    - new[k] = vs.collect{|v| v *= 10; v < -1 ? - Math.log(-v) : (v < 1 ? 0 : Math.log(v)) }
+  - tsv = new
+
+  = tool :Rpng, :plot => "rbbt.require('pheatmap');pheatmap(data, cluster_cols=FALSE)", :data => tsv, :height => height
+
+  

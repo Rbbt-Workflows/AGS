@@ -1,0 +1,16 @@
+- action_card = ActionCard.new 
+= action_card_render action_card do
+
+  - tsv = AGS.fold_changes
+  - tsv = tsv.select(list.to(:name))
+  - height = tsv.length * 10
+
+  - new = tsv.annotate({})
+  - tsv.each do |k,vs|
+    - new[k] = vs.collect{|v| v *= 10; v < -1 ? - Math.log(-v) : (v < 1 ? 0 : Math.log(v)) }
+  - tsv = new
+
+  = tool :Rpng, :plot => "rbbt.require('pheatmap');pheatmap(data, cluster_cols=FALSE)", :data => tsv, :height => height
+ 
+
+

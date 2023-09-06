@@ -1,0 +1,42 @@
+- action_card = ActionCard.new do
+  - input :log_time, :boolean, "Take the log of the time in hours"
+  - input :absolute, :boolean, "Make values absolute"
+  - input :show_points, :boolean, "Show individual gene values"
+  - input :max, :float, "Limit plot axis", nil
+
+= action_card_render action_card do
+
+  - log_time = true unless defined? log_time
+  - absolute = false unless defined? absolute
+  - show_points = false unless defined? show_points
+  - max = 0 unless defined? max
+  - max = max.to_f
+  - max = nil if max == 0
+  - tsv = AGS.fold_changes
+  - tsv = tsv.select(list.to(:name))
+  - melt = TSV.setup({}, "ID~Gene,Experiment,Time,Value")
+  - tsv.each do |gene,values|
+    - values.zip(tsv.fields).each do |value, field|
+      - value = value.to_f
+      - value = value.to_f.abs if absolute
+      - experiment, time = field.split(".")
+      - time = time.scan(/\d+/).first.to_i
+      - experiment = experiment[3..-1]
+      - values = [gene, experiment, time, value]
+      - id = Misc.digest(values*":")
+      - melt[id] = values
+
+  - experiments = melt.column("Experiment").values.flatten.uniq
+  - time = melt.column("Time").values.flatten.uniq
+  - melt_median = TSV.setup({}, "ID~Experiment,Time,Median")
+  - experiments.each do |experiment|
+    - time.each do |time_point|
+      - values = melt.select{|k,v| v[1] == experiment && v[2].to_i == time_point.to_i}.column("Value").values.flatten
+      - median = Misc.median(values)
+      - melt_median[Misc.digest([experiment, time_point] * ":")] = [experiment, time_point, median]
+  -#= tool :Rggplot, :plot => "ggplot(data) + geom_smooth(aes(x=Time, y=Value, group=Experiment, color=Experiment,fill=Experiment)) + theme(text = element_text(size = 5))", :data => melt, :size => 5
+  = tool :Rggplot, :plot => "ggplot(data, aes(x=Time, y=Value, group=Experiment, color=Experiment)) #{log_time ? " + scale_x_continuous(trans='log2')" : ""} #{show_points ? "+ geom_jitter(size=0.01,aes(width=2),alpha=0.2) " : "" } + geom_smooth(aes(fill=Experiment), method='gam', formula=y ~ s(x, bs = 'cs', k=5)) + #{max ? "ylim(-#{max},#{max}) +" : "" } theme(text = element_text(size = 5))", :data => melt, :size => 3
+
+  = tool :Rggplot, :plot => "ggplot(data, aes(x=Time, y=Median, group=Experiment, color=Experiment)) #{log_time ? " + scale_x_continuous(trans='log2')" : ""} + geom_line() + #{max ? "ylim(-#{max},#{max}) +" : "" } theme(text = element_text(size = 5))", :data => melt_median, :size => 3
+
+

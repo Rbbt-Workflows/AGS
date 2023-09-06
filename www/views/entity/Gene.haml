@@ -1,0 +1,82 @@
+- entity_card = EntityCard.new entity
+- name = entity.respond_to?(:name)? entity.name || entity : entity
+
+- if not entity.respond_to?(:long_name)
+  - if entity.respond_to?(:name)
+    - entity_card.name = [entity.base_type, entity] * ": "
+  - else
+    - entity_card.name = entity.base_type
+  - entity_card.long_name = name
+
+- list_container = ListContainer.new
+
+- if entity.respond_to? :genes
+  - genes = entity.genes
+  - list_container.add "#{name} #{entity.base_type} genes", genes
+
+- if targets = AGS.regulome[name]
+  - Gene.setup(targets, "Associated Gene Name", AGS.organism)
+  - list_container.add "Transcription targets for #{name}", targets
+- clusters = (AGS.gene_clusters[name] || []).flatten.uniq - ["UNCLASSIFIED"]
+- Cluster.setup(clusters)
+
+- list_container.add "Clusters #{name} belongs to", clusters
+
+- entity_card.list_container = list_container
+- entity_card.action_controller = default_action_controller entity
+
+= entity_card_render entity_card do
+  
+  .figure.float
+    .title
+      Gene expression
+    - log_time = false unless defined? log_time
+    - tsv = AGS.fold_changes.select(name)
+    - melt = TSV.setup({}, "ID~Gene,Experiment,Time,Value")
+    - tsv.each do |gene,values|
+      - values.zip(tsv.fields).each do |value, field|
+        - experiment, time = field.split(".")
+        - time = time.scan(/\d+/).first.to_i
+        - experiment = experiment[3..-1]
+        - values = [gene, experiment, time, value]
+        - id = Misc.digest(values*":")
+        - melt[id] = values
+    = tool :Rggplot, :plot => "ggplot(data, aes(x=#{log_time ? "log(Time)" : "Time"}, y=Value, group=Experiment, color=Experiment)) + geom_point() + geom_line() + theme(text = element_text(size = 5))", :data => melt, :size => 2
+
+  - decoupler = AGS.decoupler
+  - if decoupler.include? name
+
+    .figure.float
+      .title
+        Transcript factor activity by decoupler
+      - log_time = false unless defined? log_time
+      - tsv = decoupler.select(name)
+      - melt = TSV.setup({}, "ID~Gene,Experiment,Time,Value")
+      - tsv.each do |gene,values|
+        - values.zip(tsv.fields).each do |value, field|
+          - experiment, time = field.split(".")
+          - time = time.scan(/\d+/).first.to_i
+          - experiment = experiment[3..-1]
+          - values = [gene, experiment, time, value]
+          - id = Misc.digest(values*":")
+          - melt[id] = values
+      = tool :Rggplot, :plot => "ggplot(data, aes(x=#{log_time ? "log(Time)" : "Time"}, y=Value, group=Experiment, color=Experiment)) + geom_point() + geom_line() + theme(text = element_text(size = 5))", :data => melt, :size => 2
+
+    .figure.float
+      .title
+        Target gene response
+      - log_time = false unless defined? log_time
+      - tsv = AGS.fold_changes
+      - tsv = tsv.select(targets.to(:name))
+      - melt = TSV.setup({}, "ID~Gene,Experiment,Time,Value")
+      - tsv.each do |gene,values|
+        - values.zip(tsv.fields).each do |value, field|
+          - value = value.to_f.abs
+          - experiment, time = field.split(".")
+          - time = time.scan(/\d+/).first.to_i
+          - experiment = experiment[3..-1]
+          - values = [gene, experiment, time, value]
+          - id = Misc.digest(values*":")
+          - melt[id] = values
+      = tool :Rggplot, :plot => "ggplot(data, aes(x=#{log_time ? "log(Time)" : "Time"}, y=Value, group=Experiment, color=Experiment)) + geom_smooth(aes(fill=Experiment), method='gam', formula=y ~ s(x, bs = 'cs', k=5)) + theme(text = element_text(size = 5))", :data => melt, :size => 2
+

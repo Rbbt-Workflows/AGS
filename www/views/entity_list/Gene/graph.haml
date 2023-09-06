@@ -1,0 +1,19 @@
+= graph_js AGS::KB do |kb|
+  - tris = kb.subset(:regulome, :target => list, :source => :all)
+
+  - tris = tris.filter("weight") do |v| 
+    - v.to_f > 0.7
+
+  - tfs = tris.source_entity.uniq
+  - tgs = tris.target_entity.uniq
+  -# add_entities tgs
+  -# add_entities tfs
+  - add_associations tris
+  - gene_role = {}
+  - tgs.each{|g| gene_role[g] = "TG" }
+  - tfs.each{|g| gene_role[g] = "TF" }
+
+  - add_property :nodes, :role, :map, :code, gene_role
+
+  - add_aesthetic :nodes, :color, :map, :role, "TF" => "red", "TG" => "green"
+  - add_aesthetic :edges, :width, :info, :weight, nil

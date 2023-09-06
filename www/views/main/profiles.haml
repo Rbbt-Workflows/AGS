@@ -1,0 +1,18 @@
+
+%h1 Profile clusters
+
+- gene_clusters = AGS.job(:gene_clusters).run
+- experiments = gene_clusters.fields
+- types = gene_clusters.values.flatten.uniq.sort.sort_by{|n| n.scan(/\d+/)[0].to_i}
+
+- experiments.each do |experiment|
+  %h2= experiment
+  - list_container = ListContainer.new
+  - types.each do |type|
+    - genes = gene_clusters.select(experiment => type).keys
+    - next if genes.empty?
+    - list_container.add "#{experiment} #{type} genes", genes
+  .list_container
+    = list_container_render(list_container)
+
+- ppp types * ", "
