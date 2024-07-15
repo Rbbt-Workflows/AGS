@@ -3,7 +3,7 @@
 
 = action_card_render action_card do
 
-  - ensembl = entity.to :ensembl
+  - ensembl = entity.to "Ensembl Gene ID"
   - name = entity.to :name
 
   - clusters = AGS.job(:gene_clusters).run

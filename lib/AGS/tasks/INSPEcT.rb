@@ -1,6 +1,8 @@
 module AGS
   task :INSPEcT => :tsv do
-    treatment_tsvs = Rbbt.data.INSPEcT.glob("*").collect do |dirname|
+    files = Rbbt.data.INSPEcT.glob("*")
+    bar = self.progress_bar("Loading INSPEcT files", max: files.length)
+    treatment_tsvs = files.collect do |dirname|
       Path.setup(dirname)
       treatment = File.basename(dirname)
       data_file = dirname.glob("*_data.csv").first
@@ -14,17 +16,25 @@ module AGS
       data.fields = data.fields.collect{|f| [treatment, f.gsub('"','')] * ": " }
       gene_info.fields = gene_info.fields.collect{|f| [treatment, f.gsub('"','')] * ": " }
 
-      gene_info.attach data, :complete => true
-    end
+      gene_info.attach data, :complete => true, insitu: true
 
-    treatment_tsvs.inject(nil) do |acc,tsv|
+      bar.tick
+      gene_info
+    end
+    bar.remove
+
+    bar = self.progress_bar("Merging INSPEcT files", max: files.length)
+    res = treatment_tsvs.inject(nil) do |acc,tsv|
       if acc.nil?
         acc = tsv
       else
-        acc.attach tsv, :complete => true
+        acc.attach tsv, :complete => true, insitu: true
       end
+      bar.tick
       acc
     end
+    bar.remove
+    res
   end
 
   dep :INSPEcT
@@ -35,7 +45,7 @@ module AGS
 
     treatments = tsv.fields.collect{|f| f.split(": ").first }.uniq
     treatments.each do |treatment|
-      field = [treatment, 'INSPEcT clusters'] * ": "
+      field = [treatment, 'INSPEcT synthesis clusters'] * ": "
       synthesis_fields = time_points.collect{|t| [treatment, "synthesis_#{t}"] * ": " }
       synthesis_fields_index = synthesis_fields.collect{|f| tsv.fields.index f }
       tsv.add_field field do |ens,values|
@@ -75,25 +85,82 @@ module AGS
     tsv
   end
 
+  dep :INSPEcT
+  task :degradation_changes => :tsv do
+    tsv = step(:INSPEcT).load
+
+    time_points = %w(0 1 2 4 8 24)
+
+    treatments = tsv.fields.collect{|f| f.split(": ").first }.uniq
+    treatments.each do |treatment|
+      field = [treatment, 'INSPEcT degradation clusters'] * ": "
+      synthesis_fields = time_points.collect{|t| [treatment, "degradation_#{t}"] * ": " }
+      synthesis_fields_index = synthesis_fields.collect{|f| tsv.fields.index f }
+      tsv.add_field field do |ens,values|
+        synthesis_values = values.values_at(*synthesis_fields_index).collect{|v| v.first }
+        elbows = (synthesis_values.length - 1).times.collect do |i| 
+          current = synthesis_values[i+1]
+          next if current.nil?
+          prev = synthesis_values[i]
+
+          current = current.to_f
+          prev = prev.to_f
+
+          if current > prev * 1.05
+            :up
+          elsif current < prev * 0.95
+            :down
+          end
+        end
+
+        clusters = []
+        last = nil
+        elbows.each do |e|
+          if e != last
+            clusters << e
+          else
+            clusters << nil
+          end
+          last = e
+        end
+
+        time_points[1..-1].zip(elbows).collect do |t,e|
+          next if e.nil?
+          [e, t] * " "
+        end.compact
+      end
+    end
+    tsv
+  end
+
   dep :synthesis_changes
+  dep :degradation_changes
   dep :fold_changes_NTNU
-  dep :gene_clusters
+  dep :change_offsets
   task :full_gene_info => :tsv do
-    i = step(:synthesis_changes).load
+    s = step(:synthesis_changes).load
+    d = step(:degradation_changes).load
     f = step(:fold_changes_NTNU).load
     f = f.transpose("Associated Gene Name")
 
-    i.attach f, :identifiers => Organism.identifiers(AGS.organism)
+    s = s.change_key "Associated Gene Name", identifiers: Organism.identifiers(AGS.organism)
+    d = d.change_key "Associated Gene Name", identifiers: Organism.identifiers(AGS.organism)
 
-    index = Organism.identifiers(AGS.organism).index :target => "Associated Gene Name", :fields => ["Ensembl Gene ID"], :type => :single, :order => true, :persist => true
-    i.add_field "Associated Gene Name" do |e|
-      index[e]
+    s.attach d, :identifiers => Organism.identifiers(AGS.organism), complete: true
+    s.attach f, :identifiers => Organism.identifiers(AGS.organism), complete: true
+
+    index = Organism.identifiers(AGS.organism).index :target => "Ensembl Gene ID", 
+      :fields => ["Associated Gene Name"], 
+      :order => true, 
+      :persist => true
+    s.add_field "Ensembl Gene ID" do |n|
+      index[n]
     end
 
-    i = i.reorder :key, ["Associated Gene Name"] + i.fields[0..-2] 
-    clusters = step(:gene_clusters).load
+    s = s.reorder :key, ["Ensembl Gene ID"] + s.fields[0..-2] 
+    clusters = step(:change_offsets).load
     clusters.fields = clusters.fields.collect{|f| [f, " FC clusters"] * ":" }
-    i.attach clusters
+    s.attach clusters
   end
 
   desc "Synthesis genes are regulated by syntesis in more treatments than processing and degradation"
@@ -132,7 +199,7 @@ module AGS
     end
   end
 
-  desc "Synthesis genes are regulated by syntesis in more treatments than processing and degradation"
+  desc "Degradation genes are regulated by degradation in more treatments than processing and synthesis"
   dep :full_gene_info
   input :degradation_criteria, :select, "Criteria to define synthesis", :mayority, :select_options => %w(mayority one two three)
   task :degradation_genes => :tsv do |criteria|
@@ -152,7 +219,7 @@ module AGS
       processing_count = processing_values[1..-1].select{|v| v }.length
       degradation_count = degradation_values[1..-1].select{|v| v }.length
 
-      synthesis = case criteria
+      degradation = case criteria
                   when :mayority
                     degradation_count >= 1 && (degradation_count == [synthesis_count, processing_count, degradation_count].max)
                   when :one
@@ -164,7 +231,7 @@ module AGS
                   else
                     raise "Criteria not understood #{criteria}"
                   end
-      [synthesis]
+      [degradation]
     end
   end
 
@@ -174,10 +241,47 @@ module AGS
     tsv = step(:synthesis_genes).load
     treatments = %w(FiveZ INT_FiveZ_PI INT_PD_PI PD PI)
     time_points = [0,1,2,4,8,24]
-    tsv.add_field "Treatment profile match" do |k,values|
+
+    tsv.add_field "Degradation timepoints" do |k,values|
+      treatments.collect do |treatment|
+        clusters = values[treatment + ": FC clusters"]
+        inspect = values[treatment + ": INSPEcT degradation clusters"]
+
+        inspect_directions = {}
+        inspect.each do |ic|
+          direction, time = ic.split(" ")
+          inspect_directions[direction] ||= []
+          inspect_directions[direction] << time_points.index(time.to_i)
+        end
+
+        inspect_directions.each{|direction, values| values.sort! }
+
+        clean_inspect_directions = {}
+        inspect_directions.each do |direction,values|
+          clean_inspect_directions[direction] = values.reject{|v| values.include?(v-1) }
+        end
+
+        matches = []
+        (clean_inspect_directions["down"] || []).each do |time_index|
+          matches << time_index if clusters.select{|value| value.include?("increase") }.collect{|value| time_points.index(value.split(" ").last.to_i) }.include?(time_index)
+          matches << time_index if clusters.select{|value| value.include?("increase") }.collect{|value| time_points.index(value.split(" ").last.to_i) }.include?(time_index - 1)
+          matches << time_index if clusters.select{|value| value.include?("increase") }.collect{|value| time_points.index(value.split(" ").last.to_i) }.include?(time_index + 1)
+        end
+
+        (clean_inspect_directions["up"] || []).each do |time_index|
+          matches << time_index if clusters.select{|value| value.include?("decrease") }.collect{|value| time_points.index(value.split(" ").last.to_i) }.include?(time_index)
+          matches << time_index if clusters.select{|value| value.include?("decrease") }.collect{|value| time_points.index(value.split(" ").last.to_i) }.include?(time_index - 1)
+          matches << time_index if clusters.select{|value| value.include?("decrease") }.collect{|value| time_points.index(value.split(" ").last.to_i) }.include?(time_index + 1)
+        end
+
+        matches.collect{|m| [treatment, time_points[m]] * ":" }
+      end.flatten
+    end
+
+    tsv.add_field "Treatment synthesis profile match" do |k,values|
       treatments.select do |treatment|
         clusters = values[treatment + ": FC clusters"]
-        inspect = values[treatment + ": INSPEcT clusters"]
+        inspect = values[treatment + ": INSPEcT synthesis clusters"]
 
         inspect_directions = {}
         inspect.each do |ic|
@@ -195,15 +299,15 @@ module AGS
 
         match = false
         (clean_inspect_directions["up"] || []).each do |time_index|
-          match = true if clusters.select{|value| value.include?("start increase") }.collect{|value| time_points.index(value.split(" ").last.to_i) }.include?(time_index)
-          match = true if clusters.select{|value| value.include?("start increase") }.collect{|value| time_points.index(value.split(" ").last.to_i) }.include?(time_index - 1)
-          match = true if clusters.select{|value| value.include?("start increase") }.collect{|value| time_points.index(value.split(" ").last.to_i) }.include?(time_index + 1)
+          match = true if clusters.select{|value| value.include?("increase") }.collect{|value| time_points.index(value.split(" ").last.to_i) }.include?(time_index)
+          match = true if clusters.select{|value| value.include?("increase") }.collect{|value| time_points.index(value.split(" ").last.to_i) }.include?(time_index - 1)
+          match = true if clusters.select{|value| value.include?("increase") }.collect{|value| time_points.index(value.split(" ").last.to_i) }.include?(time_index + 1)
         end
 
         (clean_inspect_directions["down"] || []).each do |time_index|
-          match = true if clusters.select{|value| value.include?("start decrease") }.collect{|value| time_points.index(value.split(" ").last.to_i) }.include?(time_index)
-          match = true if clusters.select{|value| value.include?("start decrease") }.collect{|value| time_points.index(value.split(" ").last.to_i) }.include?(time_index - 1)
-          match = true if clusters.select{|value| value.include?("start decrease") }.collect{|value| time_points.index(value.split(" ").last.to_i) }.include?(time_index + 1)
+          match = true if clusters.select{|value| value.include?("decrease") }.collect{|value| time_points.index(value.split(" ").last.to_i) }.include?(time_index)
+          match = true if clusters.select{|value| value.include?("decrease") }.collect{|value| time_points.index(value.split(" ").last.to_i) }.include?(time_index - 1)
+          match = true if clusters.select{|value| value.include?("decrease") }.collect{|value| time_points.index(value.split(" ").last.to_i) }.include?(time_index + 1)
         end
 
 
@@ -211,9 +315,10 @@ module AGS
       end
     end
 
-    tsv.add_field "Vetted gene" do |k,values|
-      values["Treatment profile match"].any? && values["Synthesis gene"].first.to_s == "true"
+    tsv.add_field "Vetted synthesis gene" do |k,values|
+      values["Treatment synthesis profile match"].any? && values["Synthesis gene"].first.to_s == "true"
     end
+
   end
 
   dep :vetted_genes
@@ -231,7 +336,7 @@ module AGS
 
   dep :vetted_genes
   task :vetted_gene_list => :array do
-    step(:vetted_genes).load.select("Vetted gene" => "true").column("Associated Gene Name").values.flatten.uniq
+    step(:vetted_genes).load.select("Vetted synthesis gene" => "true").column("Associated Gene Name").values.flatten.uniq
   end
 
   dep :vetted_gene_list
@@ -288,3 +393,5 @@ module AGS
   end
 
 end
+
+require_relative 'INSPEcT/synthesis'

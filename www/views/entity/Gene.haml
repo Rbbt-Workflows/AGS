@@ -41,7 +41,7 @@
         - values = [gene, experiment, time, value]
         - id = Misc.digest(values*":")
         - melt[id] = values
-    = tool :Rggplot, :plot => "ggplot(data, aes(x=#{log_time ? "log(Time)" : "Time"}, y=Value, group=Experiment, color=Experiment)) + geom_point() + geom_line() + theme(text = element_text(size = 5))", :data => melt, :size => 2
+    = tool :Rggplot, :plot => "ggplot(data, aes(x=#{log_time ? "log(Time)" : "Time"}, y=Value, group=Experiment, color=Experiment)) + geom_point() + geom_line() + theme(text = element_text(size = 3))", :data => melt, :size => 3
 
   - decoupler = AGS.decoupler
   - if decoupler.include? name

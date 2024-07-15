@@ -1,0 +1,84 @@
+%h1 Target-gene expression for #{entity.name}
+
+%p
+  Expression values are already converted to the right direction using the mode of regulations, so negative regulation targets
+  have their fc multiplied by -1.
+
+
+- regulome = SaezLab.job(:regulome).produce.path.tsv :key_field => 'source', :type => :double, :merge => true
+- regulome_targets = regulome.column('target').to_flat
+- regulome_weight = regulome.unzip('target').column('weight').to_single
+- targets = regulome_targets[entity.name]
+
+- gc = AGS.job(:change_offsets).run
+
+- gc = gc.subset(targets)
+
+- if targets.nil? || targets.empty?
+  No targets
+- else
+  
+  - require 'rbbt/rest/common/tabs'
+  = tabs do |tab|
+    - tab.active "INT_PD_PI"
+    - AGS::TREATMENTS.each do |treatment|
+      - next if treatment == "DMSO"
+      - tab.add treatment do
+        - data = nil
+        - AGS::TIME_POINTS.each do |time_point|
+          - matrix_full    = AGS.job(:timepoint_matrix, treatment: treatment, time_point: time_point, data_type: :fc).run.transpose
+          - matrix_dynamic = AGS.job(:timepoint_matrix, treatment: treatment, time_point: time_point, data_type: :range, dynamic: true).run.transpose
+          - matrix_full = matrix_full.subset(targets)
+          - dynamic = matrix_dynamic.keys & targets
+          - data = data.nil? ? matrix_full : data.attach(matrix_full, complete: true)
+
+        - text = "Targets of #{entity.name} in #{treatment}"
+        - filename = text + ".png"
+
+        - require 'rbbt/util/R'
+
+        - data.fields.each do |field|
+          - data.process field do |v,k|
+            - weight = regulome_weight[[entity.name, k] * ":"]
+            - v.to_f * weight.to_f
+
+        - data.add_field "Annotated gene" do |k,v|
+          - weight = regulome_weight[[entity.name, k] * ":"]
+          - if weight.to_f < 0
+            - "- " + k
+          - else
+            - "+ " + k
+
+        - data = data.reorder "Annotated gene", data.fields[0..-2]
+
+        - list_container = ListContainer.new
+        - AGS::TIME_POINTS.each do |time_point|
+          - cluster_targets = gc.select(treatment => ["increase #{time_point}", "decrease #{time_point}", /increase #{time_point}-/, /decrease #{time_point}-/]).keys
+          - cluster_targets += gc.select(treatment => /increase #{time_point}-/).keys
+          - cluster_targets += gc.select(treatment => /increase #{time_point}-/).keys
+          - cluster_targets = Entity.prepare_entity(cluster_targets, "Associated Gene Name")
+          - list_container.add "#{treatment} cluster targets for #{entity.name} at #{time_point}h", cluster_targets
+        .list_container
+          = list_container_render(list_container)
+
+        .figure
+          .title
+            = text
+            = resource filename.sub('png','xlsx'), 'Excel', :link do |filename|
+              - data.xlsx filename
+
+          .content
+            - if data.size > 2
+              = resource filename, text, :image do |filename|
+                :ruby
+                  data.R <<-EOF
+                    rbbt.require('gplots');
+                    colors = hcl.colors(256, 'Blue-Red')
+                    rbbt.heatmap('#{filename}', data, take_log=T, height='auto', margins = c(10,12), dendrogram='row', Colv=FALSE, trace='none', col = colors, density.info="none", keysize = 0.75)
+                  EOF
+            - else
+              No targets
+  
+  = table do
+    - next gc
+

@@ -2,10 +2,17 @@ module AGS
   input :subset, :array, "Subset to a list of genes"
   task :fold_changes_NTNU => :tsv do |subset|
     tsv = Rbbt.data.FC["deseq2_log2foldchange_ashrshrink_outliersremoved_untreatedT0asreference_independentfiltering.txt"].tsv
+    tsv.identifiers = Organism.identifiers(AGS.organism)
 
+    log :translate, "Translate to gene name"
     tsv = tsv.change_key("Associated Gene Name")
 
-    tsv = tsv.select(subset) if subset && subset.any?
+    tsv.delete("")
+
+    if subset && subset.any?
+      log :subset, "Subset"
+      tsv = tsv.select(subset)
+    end
 
     tsv.transpose
   end
@@ -38,10 +45,10 @@ module AGS
 
     tsv = tsv.change_key("Associated Gene Name", :identifiers => Organism.identifiers(AGS.organism))
 
+    tsv.delete("")
+
     tsv.cast = :to_f
 
     tsv.transpose
   end
-
-
 end

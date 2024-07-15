@@ -3,30 +3,45 @@ AGS=/$PWD filter="*.rb *.rake Rakefile *.rdoc *.R *.sh *.js *.haml *.sass *.txt 
  bin=bin filter="*"{
  }
  lib=lib {
+  knowledge_base=knowledge_base{
+   AGS.rb
+  }
   sinatra.rb
   tasks=AGS/tasks{
    NTNU.rb
    gene_counts.rb
    gene_clusters.rb
+   change_starts.rb
    gene_clusters=gene_clusters{
     rules.old.rb
     rules.rb
+    rules_refactored.rb
    }
    INSPEcT.rb
+   INSPEcT=INSPEcT{
+    synthesis.rb
+   }
    decoupler.rb
+   decoupler_old.rb
+   offset.rb
+   timepoint_heatmaps.rb
+   downstream_targets.rb
+   consistency.rb
    benchmarks.rb
-  }
-  knowledge_base=knowledge_base{
-   AGS.rb
   }
  }
  test=test {
   test_helper.rb
  }
  data=data filter="*"{
+  AGS_dbTFs.list
   cluster_groups.tsv
   gene_modules.tsv
+  good_tfs.list
+  interesting_tfs.list
+  not_expressed.list
   super_cluster_names.tsv
+  noisy_genes.list
   FC=FC{
    deseq2_log2foldchange_ashrshrink_outliersremoved_untreatedT0asreference_independentfiltering.txt
    deseq2_pvalue_fdradjusted_outliersremoved_untreatedT0asreference_independentfiltering.txt
@@ -42,6 +57,14 @@ AGS=/$PWD filter="*.rb *.rake Rakefile *.rdoc *.R *.sh *.js *.haml *.sass *.txt 
     decoupler_pre=decoupler_pre{
      job_result.haml
     }
+    timepoint_matrix=timepoint_matrix{
+     job_result.haml
+    }
+   }
+   main=main{
+    clusters.haml
+    heatmaps.haml
+    profiles.haml
    }
    entity_list=entity_list{
     Gene.haml
@@ -49,7 +72,9 @@ AGS=/$PWD filter="*.rb *.rake Rakefile *.rdoc *.R *.sh *.js *.haml *.sass *.txt 
      heatmap.haml
      expression.haml
      decoupler.haml
+     decoupler.old
      graph.haml
+     graph.check
      over_representation.haml
     }
    }
@@ -58,11 +83,12 @@ AGS=/$PWD filter="*.rb *.rake Rakefile *.rdoc *.R *.sh *.js *.haml *.sass *.txt 
     Gene.haml
     Gene=Gene{
      expression_profiles.haml
+     target_gene_heatmap.haml
     }
-   }
-   main=main{
-    clusters.haml
-    profiles.haml
+    Treatment.haml
+    Treatment=Treatment{
+     heatmaps.haml
+    }
    }
   }
  }

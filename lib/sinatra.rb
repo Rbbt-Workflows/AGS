@@ -1,9 +1,11 @@
 require 'rbbt/sources/organism'
 
-module Entity::REST
-  USE_ENSEMBL = false
+#module Entity::REST
+#  USE_ENSEMBL = false
+#
+#end
 
-end
+Workflow.require_workflow "Genomics"
 
 module Object::Gene
   extend Entity
@@ -33,7 +35,11 @@ module Object::Cluster
   self.format = ["MetaCluster", "SuperCluster"]
 end
 
-Workflow.require_workflow "Genomics"
+module Object::Treatment
+  extend Entity
+  include Entity::REST
+end
+
 Workflow.require_workflow "ExTRI"
 Genomics.knowledge_base.register "ExTRI", ExTRI.job(:pairs).produce.path, :source => "Transcription Factor (Associated Gene Name)", :target => "Target Gene (Associated Gene Name)"
 Workflow.require_workflow "Enrichment"

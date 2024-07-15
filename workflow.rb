@@ -12,6 +12,11 @@ Workflow.require_workflow "SaezLab"
 module AGS
   extend Workflow
 
+  #TREATMENTS = %w(DMSO FiveZ INT_FiveZ_PI INT_PD_PI PD PI)
+  TREATMENTS = %w(INT_PD_PI INT_FiveZ_PI PI FiveZ PD DMSO)
+  TIME_POINTS = [1,2,4,8,24]
+  
+
   def self.organism
     "Hsa/feb2014"
   end
@@ -70,7 +75,7 @@ module AGS
   end
 
 
-  input :fc_source, :select, "Source of fold_changes", :BSC, :select_options => %w(BSC NTNU)
+  input :fc_source, :select, "Source of fold_changes", "NTNU", :select_options => %w(BSC NTNU)
   dep :fold_changes_NTNU do |jobname,options|
     if options[:fc_source] == "BSC"
       nil
@@ -123,10 +128,9 @@ module AGS
     else
       tsv
     end
-
   end
 
-  input :fc_source, :select, "Source of fold_changes", :BSC, :select_options => %w(BSC NTNU)
+  input :fc_source, :select, "Source of fold_changes", "NTNU", :select_options => %w(BSC NTNU)
   dep :pvalues_NTNU do |jobname,options|
     if options[:fc_source] == "BSC"
       nil
@@ -181,7 +185,6 @@ module AGS
     tsv = tsv.slice(conditions) if conditions && conditions.any?
 
     tsv
-
   end
 
 
@@ -259,11 +262,16 @@ end
 
 require 'AGS/tasks/NTNU'
 require 'AGS/tasks/gene_counts'
+require 'AGS/tasks/change_starts'
 require 'AGS/tasks/gene_clusters'
 require 'AGS/tasks/INSPEcT'
 require 'AGS/tasks/decoupler'
-require 'AGS/tasks/benchmarks'
+require 'AGS/tasks/offset'
+require 'AGS/tasks/timepoint_heatmaps'
+require 'AGS/tasks/downstream_targets'
+require 'AGS/tasks/consistency'
 
+#require 'AGS/tasks/benchmarks'
 require 'knowledge_base/AGS'
 #require 'rbbt/entity/AGS'
 

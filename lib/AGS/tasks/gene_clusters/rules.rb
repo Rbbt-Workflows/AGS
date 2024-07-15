@@ -1,564 +1,247 @@
 module AGS
-	def self.cluster_rules
-		cluster_rules = {}
+
+  def self.low_rule(fc_current, fc_next, current_min, next_min, next_multiplier)
+    fc_current > current_min && fc_next > next_min && fc_current * next_multiplier > fc_next
+  end
+
+  def self.mid_rule(fc_current, fc_next, current_min, next_multiplier)
+    fc_current > current_min && fc_next > - fc_current * next_multiplier * (fc_current/current_min)**2
+  end
+
+  def self.high_rule(fc_current, current_min)
+    fc_current > current_min
+  end
+
+  def self.change_start(fc_current, fc_next, low_min, mid_min, high_min, next_min, low_multiplier, mid_multiplier)
+    low_rule(fc_current, fc_next, low_min, next_min, low_multiplier) ||
+      mid_rule(fc_current, fc_next, mid_min, mid_multiplier) ||
+      high_rule(fc_current, high_min)
+  end
+
+  def self.cluster_rules
+    cluster_rules = {}
+
+    cluster_rules["transient increase 1h to 2h"] = <<-EOF.split("\n")
+fcs[0] > 0.15 && (fcs_one[1] < - fcs[0]*0.50)
+    EOF
+
+    cluster_rules["transient increase 1h to 4h"] = <<-EOF.split("\n")
+"break" if clusters.include?("transient increase 1h to 2h")
+fcs [0] > 0.15 && fcs_one[1] < 0 && (fcs_two[2] < - fcs[0]*0.80)
+fcs [0] > 0.15 && fcs_one[1] > 0 && (fcs_one[2] < - fcs[1]*0.80)
+fcs [0] > 0.10 && fcs_one[1] > 0.03 && (fcs_one[2] < - fcs[1]*0.80)
+    EOF
+
+    cluster_rules["transient increase 1h to 8h"] = <<-EOF.split("\n")
+"break" if clusters.include?("transient increase 1h to 2h")
+"break" if clusters.include?("transient increase 1h to 4h")
+fcs [0] > 0.15 && fcs_one[1] < 0 && (fcs_three[3] < - fcs[0]*0.80)
+fcs [0] > 0.15 && fcs_one[1] > 0 && (fcs_two[3] < - fcs[1]*0.80)
+fcs [0] > 0.15 && fcs_one[1] > 0 && fcs_one[2] > 0 && (fcs_one[3] < - fcs[2]*0.80)
+fcs [0] > 0.10 && fcs_one[1] > 0.03 && fcs_one[2] < 0  &&(fcs_two[3] < - fcs[1]*0.80) 
+fcs [0] > 0.10 && fcs_one[1] > 0.03 && fcs_one[2] > 0 && (fcs_one[3] < - fcs[2]*0.80) 
+    EOF
+
+    cluster_rules["transient decrease 1h to 2h"] = <<-EOF.split("\n")
+fcs[0] < -0.15 && (fcs_one[1] > - fcs[0]*0.50)
+    EOF
+
+    cluster_rules["transient decrease 1h to 4h"] = <<-EOF.split("\n")
+"break" if clusters.include?("transient decrease 1h to 2h")
+fcs [0] < -0.15 && fcs_one[1] > 0 && (fcs_two[2] > - fcs[0]*0.80)
+fcs [0] < -0.15 && fcs_one[1] < 0 && (fcs_one[2] > - fcs[1]*0.80)
+fcs [0] < -0.10 && fcs_one[1] < -0.03 && (fcs_one[2] > - fcs[1]*0.80)
+    EOF
+
+    cluster_rules["transient decrease 1h to 8h"] = <<-EOF.split("\n")
+"break" if clusters.include?("transient decrease 1h to 2h")
+"break" if clusters.include?("transient decrease 1h to 4h")
+fcs [0] < -0.15 && fcs_one[1] > 0 && (fcs_three[3] < - fcs[0]*0.80)
+fcs [0] < -0.15 && fcs_one[1] < 0 && (fcs_two[3] < - fcs[1]*0.80)
+fcs [0] < -0.15 && fcs_one[1] < 0 && fcs_one[2] < 0 && (fcs_one[3] < - fcs[2]*0.80)
+fcs [0] < -0.10 && fcs_one[1] < -0.03 && fcs_one[2] > 0  &&(fcs_two[3] < - fcs[1]*0.80) 
+fcs [0] < -0.10 && fcs_one[1] < -0.03 && fcs_one[2] < 0 && (fcs_one[3] < - fcs[2]*0.80) 
+    EOF
+
+    cluster_rules["start increase 1h"] = <<-EOF.split("\n")
+fcs[0] > 0.10 && fcs_one[1] > 0.03 && (fcs_one[1] < fcs[0]*8)
+fcs[0] > 0.15 && fcs_one[1] > -fcs[0]*0.60*(fcs[0]/0.15)*(fcs[0]/0.15)
+fcs [0] > 0.25
+    EOF
+
+    cluster_rules["refactored start increase 1h"] = <<-EOF.split("\n")
+    AGS.rule(fcs_one[0], fcs_one[1], low_min_1h, mid_min_1h, high_min_1h, next_min_1h, low_multiplier_1h, mid_multiplier_1h)
+    EOF
+
+    cluster_rules["start decrease 1h"] = <<-EOF.split("\n")
+fcs[0] < -0.10 && fcs_one[1] < -0.03 && (fcs_one[1] > fcs[0]*8)
+fcs[0] < -0.15 && fcs_one[1] < -fcs[0]*0.60*(fcs[0]/0.15)*(fcs[0]/0.15)
+fcs [0] < -0.25
+    EOF
+
+    cluster_rules["refactored start decrease 1h"] = <<-EOF.split("\n")
+    AGS.rule(-fcs_one[0], -fcs_one[1], low_min_1h, mid_min_1h, high_min_1h, next_min_1h, low_multiplier_1h, mid_multiplier_1h)
+    EOF
 
 
-		#{{{ START INCREASE RULES
-
-		cluster_rules["start increase 1h"] = <<-EOF.split("\n")
-
-fcs[0] > 0.1 && fcs_one[1] > 0 && fcs_one [1] < 1 && fcs[2] >= 0.25
-fcs[0] > 0.15 &&  fcs_one[1] > 0.1
-fcs[0] > 0.2 &&  fcs_one[1] > 0
-fcs [0] > 0.25 &&  (fcs_one[1] > -fcs[0]*0.2)
-fcs [0] > 0.3 &&  (fcs_one[1] > -fcs[0]*0.5)
-fcs [0] > 0.35 &&  (fcs_one[1] > -fcs[0]*0.7)
-fcs [0] > 0.45 &&  (fcs_one[1] > -fcs[0]*0.9)
-fcs [0] > 0.5
-
-		EOF
-
-
-		cluster_rules["start increase 2h"] = <<-EOF.split("\n")
-
+    cluster_rules["transient increase 2h to 4h"] = <<-EOF.split("\n")
 "break" if clusters.include?("start increase 1h")
+fcs_one[1] > 0.20 && (fcs_one[2] < -fcs_one[1]*0.80)
+    EOF
 
-fcs[0] > 0.04 && fcs_one[1] > 0.08 &&  fcs_one [2] > 0.05 && fcs_one[2] < 1
-fcs_one[1] > 0.12 &&  fcs_one [2] > 0.05 && fcs_one[3] > 0.05 && fcs_one[2] < 1
-fcs_one[1] > 0.12 &&  fcs_one [2] > 0.07 && fcs_one[3] > 0 && fcs_one[2] < 1
-fcs_one[1] > 0.12 &&  fcs_one [2] > 0.1 && fcs_one[2] < 1
-fcs[0] > 0.04 && fcs_one[1] > 0.12 && (fcs_one [2] > - fcs_one [1]*0.5)
-fcs_one[1] > 0.20 &&  fcs_one [2] > 0
-fcs_one[1] > 0.25 &&  (fcs_one [2] > - fcs_one [1]*0.5)
-fcs_one[1] > 0.3 &&  (fcs_one [2] > - fcs_one [1]*0.7)
-fcs_one[1] > 0.35 &&  (fcs_one [2] > - fcs_one [1]*0.9)
-fcs_one[1] > 0.45 &&  (fcs_one [2] > - fcs_one [1])
-fcs_one[1] > 0.5
+    cluster_rules["transient increase 2h to 8h"] = <<-EOF.split("\n")
+"break" if clusters.include?("start increase 1h")
+"break" if clusters.include?("transient increase 2h to 4h")
+fcs_one[1] > 0.20 && fcs_one[2] < 0 && (fcs_two[3] < -fcs_one[1]*0.80)
+fcs_one[1] > 0.20 && fcs_one[2] > 0 && (fcs_one[3] < -fcs_two[2]*0.80)
+fcs_one[1] > 0.10 && fcs_one[2] > 0.10 && (fcs_one[3] < -fcs_two[2]*0.80)
+    EOF
 
-		EOF
+    cluster_rules["transient decrease 2h to 4h"] = <<-EOF.split("\n")
+"break" if clusters.include?("start decrease 1h")
+fcs_one[1] < -0.20 && (fcs_one[2] > -fcs_one[1]*0.80)
+    EOF
+
+    cluster_rules["transient decrease 2h to 8h"] = <<-EOF.split("\n")
+"break" if clusters.include?("start decrease 1h")
+"break" if clusters.include?("transient decrease 2h to 4h")
+fcs_one[1] < -0.20 && fcs_one[2] > 0 && (fcs_two[3] > -fcs_one[1]*0.80)
+fcs_one[1] < -0.20 && fcs_one[2] < 0 && (fcs_one[3] > -fcs_two[2]*0.80)
+fcs_one[1] < -0.10 && fcs_one[2] < 0.10 && (fcs_one[3] > -fcs_two[2]*0.80)
+    EOF
+
+    cluster_rules["start increase 2h"] = <<-EOF.split("\n")
+"break" if clusters.include?("start increase 1h")
+fcs_one[1] > 0.10 && fcs_one[2] > 0.10 && (fcs_one[2] < fcs_one[1]*8) 
+fcs_one[1] > 0.20 && (fcs_one[2] > - fcs_one[1]*0.70*(fcs_one[1]/0.20)*(fcs_one[1]/0.20)) 
+fcs_one[1] > 0.30
+    EOF
+
+    cluster_rules["refactored start increase 2h"] = <<-EOF.split("\n")
+"break" if clusters.include?("refactored start increase 1h")
+    AGS.rule(fcs_one[1], fcs_one[2], low_min_2h, mid_min_2h, high_min_2h, next_min_2h, low_multiplier_2h, mid_multiplier_2h)
+    EOF
+
+    cluster_rules["start decrease 2h"] = <<-EOF.split("\n")
+"break" if clusters.include?("start decrease 1h")
+fcs_one[1] < -0.10 && fcs_one[2] < -0.10 && (fcs_one[2] > fcs_one[3]*8) 
+fcs_one[1] < -0.20 && (fcs_one[2] < - fcs_one[1]*0.70*(fcs_one[1]/0.20)*(fcs_one[1]/0.20)) 
+fcs_one[1] < -0.30
+    EOF
+
+    cluster_rules["refactored start decrease 2h"] = <<-EOF.split("\n")
+"break" if clusters.include?("refactored start decrease 1h")
+    AGS.rule(-fcs_one[1], -fcs_one[2], low_min_2h, mid_min_2h, high_min_2h, next_min_2h, low_multiplier_2h, mid_multiplier_2h)
+    EOF
 
 
-		cluster_rules["start increase 4h"] = <<-EOF.split("\n")
-
+    cluster_rules["transient increase 4h to 8h"] = <<-EOF.split("\n")
 "break" if clusters.include?("start increase 1h")
 "break" if clusters.include?("start increase 2h")
+fcs_one[2] > 0.20 && (fcs_one[3] < -fcs_one[2]*0.80)
+    EOF
 
-fcs_two[2] >= 0.12 && fcs_one[1] > 0.04 && fcs_one[2] > 0.05 &&  fcs_one [3] > 0.05  && fcs_one[3] < 1
-fcs_one[1] < -0.04 && fcs_ratio[2] < 0 && fcs_one[2] > 0.1 && fcs_one [3] > 0
-fcs_one[1] < -0.04 && fcs_ratio[2] < 0 && fcs_one[2] > 0.2 &&  (fcs_one [3] > - fcs_one [2]*0.9)
-fcs_one[1] < -0.04 && fcs_ratio[2] < 0 && fcs_one[2] > 0.25 &&  (fcs_one [3] > - fcs_one [2])
-fcs_one[1] < -0.04 && fcs_ratio[2] < 0 && fcs_one[2] > 0.35 &&  (fcs_one [3] > - fcs_one [2]*1.3)
-fcs_one[1] > 0.04  && fcs_one[2] > 0.15 && fcs_one [3] > 0
-fcs_one[1] > 0.04  && fcs_one[2] > 0.25 &&  (fcs_one [3] > - fcs_one [2]*0.9)
-fcs_one[1] > 0.04  && fcs_one[2] > 0.35 &&  (fcs_one [3] > - fcs_one [2])
-fcs_one[1] > 0.04  && fcs_one[2] > 0.4 &&  (fcs_one [3] > - fcs_one [2]*1.3)
-fcs_one[2] > 0.15 &&  fcs_one [3] > 0.1 && fcs_one[3] < 1
-fcs_one[2] > 0.2 &&  fcs_one [3] > 0
-fcs_one[2] > 0.25 &&  (fcs_one [3] > - fcs_one [2]*0.7)
-fcs_one[2] > 0.35 &&  (fcs_one [3] > - fcs_one [2])
-fcs_one[2] > 0.45 &&  (fcs_one [3] > - fcs_one [2]*1.3)
-fcs_one[2] > 0.5
-
-		EOF
-
-
-
-		cluster_rules["start increase 8h"] = <<-EOF.split("\n")
-
-"break" if clusters.include?("start increase 1h")
-"break" if clusters.include?("start increase 2h")
-"break" if clusters.include?("start increase 4h")
-"break" if clusters.include?(" decrease to new level 4-24h")
-"break" if clusters.include?(" increase to new level 4-24h")
-
-fcs_one[3] > 0.15 && fcs_one [4] > 0.1 && fcs_one [4] < 1
-fcs_one[2] < -0.04 && fcs_ratio[3] < 0 && fcs_one[3] > 0.1 &&  fcs_one [4] > 0
-fcs_one[2] < -0.04 && fcs_ratio[3] < 0 && fcs_one[3] > 0.2 &&  (fcs_one [4] > - fcs_one [3]*0.9)
-fcs_one[2] < -0.04 && fcs_ratio[3] < 0 && fcs_one[3] > 0.25 &&  (fcs_one [4] > - fcs_one [3])
-fcs_one[2] < -0.04 && fcs_ratio[3] < 0 && fcs_one[3] > 0.35 &&  (fcs_one [4] > - fcs_one [3]*1.3)
-fcs_one[2] > 0.04 && fcs_one[3] > 0.15 &&  fcs_one [4] > 0
-fcs_one[2] > 0.04 && fcs_one[3] > 0.2 &&  (fcs_one [4] > - fcs_one [3]*0.9)
-fcs_one[2] > 0.04 && fcs_one[3] > 0.25 &&  (fcs_one [4] > - fcs_one [3])
-fcs_one[2] > 0.04 && fcs_one[3] > 0.4 &&  (fcs_one [4] > - fcs_one [3]*1.3)
-fcs_one[3] > 0.20 &&  fcs_one [4] > 0
-fcs_one[3] > 0.25 &&  (fcs_one [4] > - fcs_one [3]*0.7)
-fcs_one[3] > 0.3 &&  (fcs_one [4] > - fcs_one [3]*0.9)
-fcs_one[3] > 0.35 &&  (fcs_one [4] > - fcs_one [3])
-fcs_one[3] > 0.4 &&  (fcs_one [4] > - fcs_one [3]*1.3)
-fcs_one[3] > 0.5
-
-		EOF
-
-
-
-
-		cluster_rules["start increase 24h"] = <<-EOF.split("\n")
-
-"break" if clusters.include?("start increase 1h")
-"break" if clusters.include?("start increase 2h")
-"break" if clusters.include?("start increase 4h")
-"break" if clusters.include?("start increase 8h")
-"break" if clusters.include?(" decrease to new level 4-24h")
-"break" if clusters.include?(" decrease to new level 8-24h")
-"break" if clusters.include?(" increase to new level 4-24h")
-"break" if clusters.include?(" increase to new level 8-24h")
-
-fcs_one[3] < -0.05  && fcs_ratio[4] <0 && fcs_one[4] > 0.2
-fcs_one[3] > 0.05 && fcs_one[4] > 0.2
-fcs_one[4] >= 0.25
-
-        EOF
-
-
-        #{{{ START DECREASE RULES
-
-
-        cluster_rules["start decrease 1h"] = <<-EOF.split("\n")
-
-fcs[0] < -0.1 && fcs_one[1] < 0 && fcs_one[1] > -1 &&  fcs[3] <=  -0.25
-fcs[0] < -0.15 &&  fcs_one[1] <  -0.1
-fcs[0] < -0.2 &&  fcs_one[1] <  0
-fcs [0] < -0.25 &&  (fcs_one[1] < -fcs[0]*0.2)
-fcs [0] < -0.3 &&  (fcs_one[1] < -fcs[0]*0.5)
-fcs [0] < -0.35 &&  (fcs_one[1] < -fcs[0]*0.7)
-fcs [0] < -0.45 &&  (fcs_one[1] < -fcs[0]*0.9)
-fcs [0] < -0.5
-
-        EOF
-
-
-        cluster_rules["start decrease 2h"] = <<-EOF.split("\n")
-
-"break" if clusters.include?("start decrease 1h")
-
-fcs[0] < -0.04 && fcs_one[1] < -0.08 &&  fcs_one [2] < -0.05 && fcs_one[3] > -1
-fcs_one[1] < -0.12 && fcs_one [2] < -0.05 && fcs_one [3] < -0.05 && fcs_one[3] > -1
-fcs_one[1] < -0.12 && fcs_one [2] < -0.07 && fcs_one [3] < 0 && fcs_one[3] > -1
-fcs_one[1] < -0.12 && fcs_one [2] < -0.1 && fcs_one[3] > -1
-fcs[0] < -0.04 && fcs_one[1] < -0.12 &&  (fcs_one [2] < - fcs_one [1]*0.5)
-fcs_one[1] < -0.20 &&  fcs_one [2] < 0
-fcs_one[1] < -0.25 &&  (fcs_one [2] < - fcs_one [1]*0.5)
-fcs_one[1] < -0.3 &&  (fcs_one [2] < - fcs_one [1]*0.7)
-fcs_one[1] < -0.35 &&  (fcs_one [2] < - fcs_one [1]*0.9)
-fcs_one[1] < -0.45 &&  (fcs_one [2] < - fcs_one [1])
-fcs_one[1] < -0.5
-
-        EOF
-
-        cluster_rules["start decrease 4h"] = <<-EOF.split("\n")
-
+    cluster_rules["transient decrease 4h to 8h"] = <<-EOF.split("\n")
 "break" if clusters.include?("start decrease 1h")
 "break" if clusters.include?("start decrease 2h")
-
-fcs_two[2] <= -0.12 && fcs_one[1] < -0.04 && fcs_one[2] < -0.05 &&  fcs_one [3] < -0.05 && fcs_one[3] > -1
-fcs_one[1] > 0.04  && fcs_one[2] < -0.1 &&  fcs_one [3] <  0
-fcs_one[1] > 0.04  && fcs_one[2] < -0.2 &&  (fcs_one [3] < - fcs_one [2]*0.9)
-fcs_one[1] > 0.04  && fcs_one[2] < -0.25 &&  (fcs_one [3] < - fcs_one [2])
-fcs_one[1] > 0.04  && fcs_one[2] < -0.35 &&  (fcs_one [3] < - fcs_one [2]*1.3)
-fcs_one[1] < -0.04 && fcs_one[2] < -0.15 &&  fcs_one [3] <  0
-fcs_one[1] < -0.04 && fcs_one[2] < -0.25 &&  (fcs_one [3] < - fcs_one [2]*0.9)
-fcs_one[1] < -0.04 && fcs_one[2] < -0.35 &&  (fcs_one [3] < - fcs_one [2])
-fcs_one[1] < -0.04 && fcs_one[2] < -0.4 &&  (fcs_one [3] < - fcs_one [2]*1.3)
-fcs_one[2] < -0.15 && fcs_one [3] < -0.1 && fcs_one[3] > -1
-fcs_one[2] < -0.20 &&  fcs_one [3] <  0
-fcs_one[2] < -0.25 &&  (fcs_one [3] < - fcs_one [2]*0.7)
-fcs_one[2] < -0.35 &&  (fcs_one [3] < - fcs_one [2])
-fcs_one[2] < -0.45 &&  (fcs_one [3] < - fcs_one [2]*1.3)
-fcs_one[2] < -0.5
-
-        EOF
-
-
-
-        cluster_rules["start decrease 8h"] = <<-EOF.split("\n")
-
-"break" if clusters.include?("start decrease 1h")
-"break" if clusters.include?("start decrease 2h")
-"break" if clusters.include?("start decrease 4h")
-"break" if clusters.include?(" decrease to new level 4-24h")
-"break" if clusters.include?(" increase to new level 4-24h")
-
-fcs_one[3] < -0.15 && fcs_one[3] < -0.1 && fcs_one[4] > -1
-fcs_one[2] > 0.04 && fcs_one[3] < -0.1 &&  fcs_one[4] <  0
-fcs_one[2] > 0.04 && fcs_one[3] < -0.2 &&  (fcs_one[4] < - fcs_one[3]*0.9)
-fcs_one[2] > 0.04 && fcs_one[3] < -0.25 &&  (fcs_one[4] < - fcs_one[3])
-fcs_one[2] > 0.04 && fcs_one[3] < -0.4 && (fcs_one[4] < - fcs_one[3]*1.3)
-fcs_one[2] < -0.04 && fcs_one[3] < -0.15 &&  fcs_one[4] <  0
-fcs_one[2] < -0.04 && fcs_one[3] < -0.2 &&  (fcs_one[4] < - fcs_one[3]*0.9)
-fcs_one[2] < -0.04 && fcs_one[3] < -0.25 &&  (fcs_one[4] < - fcs_one[3])
-fcs_one[2] < -0.04 && fcs_one[3] < -0.4 && (fcs_one[4] < - fcs_one[3]*1.3)
-fcs_one[3] < -0.20 &&  fcs_one[4] <  0
-fcs_one[3] < -0.25 &&  (fcs_one[4] < - fcs_one[3]*0.7)
-fcs_one[3] < -0.3 &&  (fcs_one[4] < - fcs_one[3]*0.9)
-fcs_one[3] < -0.35 &&  (fcs_one[4] < - fcs_one[3])
-fcs_one[3] < -0.45 &&  (fcs_one[4] < - fcs_one[3]*1.3)
-fcs_two[3] <= -0.5
-
-        EOF
-
-
-
-
-        cluster_rules["start decrease 24h"] = <<-EOF.split("\n")
-
-"break" if clusters.include?("start decrease 1h")
-"break" if clusters.include?("start decrease 2h")
-"break" if clusters.include?("start decrease 4h")
-"break" if clusters.include?("start decrease 8h")
-"break" if clusters.include?(" decrease to new level 4-24h")
-"break" if clusters.include?(" decrease to new level 8-24h")
-"break" if clusters.include?(" increase to new level 4-24h")
-"break" if clusters.include?(" increase to new level 8-24h")
-
-fcs_one[3] > 0.05 && fcs_ratio[4] < 0 && fcs_one[4] < -0.2
-fcs_one[3] < -0.05 && fcs_one[4] < -0.2
-fcs_one[4] < -0.25
-
-        EOF
-        
-				#{{{ ONSET UP RULES
-
-        cluster_rules["onset 2h up"] = <<-EOF.split("\n")
-
-"break" if clusters.include?("start increase 1h")
-"break" if clusters.include?("start decrease 1h")
-
-fcs[0] > 0.04 && fcs_one[1] > 0.08 &&  fcs_one [2] > 0.05 && fcs_one[2] < 1
-fcs_one[1] > 0.12 &&  fcs_one [2] > 0.05 && fcs_one[3] > 0.05 && fcs_one[2] < 1
-fcs_one[1] > 0.12 &&  fcs_one [2] > 0.07 && fcs_one[3] > 0 && fcs_one[2] < 1
-fcs_one[1] > 0.12 &&  fcs_one [2] > 0.1 && fcs_one[2] < 1
-fcs[0] > 0.04 && fcs_one[1] > 0.12 && (fcs_one [2] > - fcs_one [1]*0.5)
-fcs_one[1] > 0.20 &&  fcs_one [2] > 0
-fcs_one[1] > 0.25 &&  (fcs_one [2] > - fcs_one [1]*0.5)
-fcs_one[1] > 0.3 &&  (fcs_one [2] > - fcs_one [1]*0.7)
-fcs_one[1] > 0.35 &&  (fcs_one [2] > - fcs_one [1]*0.9)
-fcs_one[1] > 0.45 &&  (fcs_one [2] > - fcs_one [1])
-fcs_one[1] > 0.5
-
-        EOF
-
-        cluster_rules["onset 4h up"] = <<-EOF.split("\n")
-
-"break" if clusters.include?("start increase 1h")
-"break" if clusters.include?("start decrease 1h")
-"break" if clusters.include?("start increase 2h")
-"break" if clusters.include?("start decrease 2h")
-
-fcs_two[2] >= 0.12 && fcs_one[1] > 0.04 && fcs_one[2] > 0.05 &&  fcs_one [3] > 0.05  && fcs_one[3] < 1
-fcs_one[1] < -0.04 && fcs_ratio[2] < 0 && fcs_one[2] > 0.1 && fcs_one [3] > 0
-fcs_one[1] < -0.04 && fcs_ratio[2] < 0 && fcs_one[2] > 0.2 &&  (fcs_one [3] > - fcs_one [2]*0.9)
-fcs_one[1] < -0.04 && fcs_ratio[2] < 0 && fcs_one[2] > 0.25 &&  (fcs_one [3] > - fcs_one [2])
-fcs_one[1] < -0.04 && fcs_ratio[2] < 0 && fcs_one[2] > 0.35 &&  (fcs_one [3] > - fcs_one [2]*1.3)
-fcs_one[1] > 0.04  && fcs_one[2] > 0.15 && fcs_one [3] > 0
-fcs_one[1] > 0.04  && fcs_one[2] > 0.25 &&  (fcs_one [3] > - fcs_one [2]*0.9)
-fcs_one[1] > 0.04  && fcs_one[2] > 0.35 &&  (fcs_one [3] > - fcs_one [2])
-fcs_one[1] > 0.04  && fcs_one[2] > 0.4 &&  (fcs_one [3] > - fcs_one [2]*1.3)
-fcs_one[2] > 0.15 &&  fcs_one [3] > 0.1 && fcs_one[3] < 1
-fcs_one[2] > 0.2 &&  fcs_one [3] > 0
-fcs_one[2] > 0.25 &&  (fcs_one [3] > - fcs_one [2]*0.7)
-fcs_one[2] > 0.35 &&  (fcs_one [3] > - fcs_one [2])
-fcs_one[2] > 0.45 &&  (fcs_one [3] > - fcs_one [2]*1.3)
-fcs_one[2] > 0.5
-
-        EOF
-
-        cluster_rules["onset 8h up"] = <<-EOF.split("\n")
-
-"break" if clusters.include?("start increase 1h")
-"break" if clusters.include?("start decrease 1h")
-"break" if clusters.include?("start increase 2h")
-"break" if clusters.include?("start decrease 2h")
-"break" if clusters.include?("start increase 4h")
-"break" if clusters.include?("start decrease 4h")
-"break" if clusters.include?(" decrease to new level 4-24h")
-"break" if clusters.include?(" increase to new level 4-24h")
-
-fcs_one[3] > 0.15 && fcs_one [4] > 0.1 && fcs_one [4] < 1
-fcs_one[2] < -0.04 && fcs_ratio[3] < 0 && fcs_one[3] > 0.1 &&  fcs_one [4] > 0
-fcs_one[2] < -0.04 && fcs_ratio[3] < 0 && fcs_one[3] > 0.2 &&  (fcs_one [4] > - fcs_one [3]*0.9)
-fcs_one[2] < -0.04 && fcs_ratio[3] < 0 && fcs_one[3] > 0.25 &&  (fcs_one [4] > - fcs_one [3])
-fcs_one[2] < -0.04 && fcs_ratio[3] < 0 && fcs_one[3] > 0.35 &&  (fcs_one [4] > - fcs_one [3]*1.3)
-fcs_one[2] > 0.04 && fcs_one[3] > 0.15 &&  fcs_one [4] > 0
-fcs_one[2] > 0.04 && fcs_one[3] > 0.2 &&  (fcs_one [4] > - fcs_one [3]*0.9)
-fcs_one[2] > 0.04 && fcs_one[3] > 0.25 &&  (fcs_one [4] > - fcs_one [3])
-fcs_one[2] > 0.04 && fcs_one[3] > 0.4 &&  (fcs_one [4] > - fcs_one [3]*1.3)
-fcs_one[3] > 0.20 &&  fcs_one [4] > 0
-fcs_one[3] > 0.25 &&  (fcs_one [4] > - fcs_one [3]*0.7)
-fcs_one[3] > 0.3 &&  (fcs_one [4] > - fcs_one [3]*0.9)
-fcs_one[3] > 0.35 &&  (fcs_one [4] > - fcs_one [3])
-fcs_one[3] > 0.4 &&  (fcs_one [4] > - fcs_one [3]*1.3)
-fcs_one[3] > 0.5
-
-        EOF
-
-        cluster_rules["onset 24h up"] = <<-EOF.split("\n")
-
-"break" if clusters.include?("start increase 1h")
-"break" if clusters.include?("start decrease 1h")
-"break" if clusters.include?("start increase 2h")
-"break" if clusters.include?("start decrease 2h")
-"break" if clusters.include?("start increase 4h")
-"break" if clusters.include?("start decrease 4h")
-"break" if clusters.include?("start increase 8h")
-"break" if clusters.include?("start decrease 8h")
-"break" if clusters.include?(" decrease to new level 4-24h")
-"break" if clusters.include?(" decrease to new level 8-24h")
-"break" if clusters.include?(" increase to new level 4-24h")
-"break" if clusters.include?(" increase to new level 8-24h")
-
-fcs_one[3] < -0.05  && fcs_ratio[4] <0 && fcs_one[4] > 0.2
-fcs_one[3] > 0.05 && fcs_one[4] > 0.2
-fcs_one[4] >= 0.25
-
-        EOF
-
-        #{{{ ONSET DOWN RULES
-
-        cluster_rules["onset 2h down"] = <<-EOF.split("\n")
-
-"break" if clusters.include?("start increase 1h")
-"break" if clusters.include?("start decrease 1h")
-
-fcs[0] < -0.04 && fcs_one[1] < -0.08 &&  fcs_one [2] < -0.05 && fcs_one[3] > -1
-fcs_one[1] < -0.12 && fcs_one [2] < -0.05 && fcs_one [3] < -0.05 && fcs_one[3] > -1
-fcs_one[1] < -0.12 && fcs_one [2] < -0.07 && fcs_one [3] < 0 && fcs_one[3] > -1
-fcs_one[1] < -0.12 && fcs_one [2] < -0.1 && fcs_one[3] > -1
-fcs[0] < -0.04 && fcs_one[1] < -0.12 &&  (fcs_one [2] < - fcs_one [1]*0.5)
-fcs_one[1] < -0.20 &&  fcs_one [2] < 0
-fcs_one[1] < -0.25 &&  (fcs_one [2] < - fcs_one [1]*0.5)
-fcs_one[1] < -0.3 &&  (fcs_one [2] < - fcs_one [1]*0.7)
-fcs_one[1] < -0.35 &&  (fcs_one [2] < - fcs_one [1]*0.9)
-fcs_one[1] < -0.45 &&  (fcs_one [2] < - fcs_one [1])
-fcs_one[1] < -0.5
-
-        EOF
-
-        cluster_rules["onset 4h down"] = <<-EOF.split("\n")
-
-"break" if clusters.include?("start increase 1h")
-"break" if clusters.include?("start decrease 1h")
-"break" if clusters.include?("start increase 2h")
-"break" if clusters.include?("start decrease 2h")
-
-fcs_two[2] <= -0.12 && fcs_one[1] < -0.04 && fcs_one[2] < -0.05 &&  fcs_one [3] < -0.05 && fcs_one[3] > -1
-fcs_one[1] > 0.04  && fcs_one[2] < -0.1 &&  fcs_one [3] <  0
-fcs_one[1] > 0.04  && fcs_one[2] < -0.2 &&  (fcs_one [3] < - fcs_one [2]*0.9)
-fcs_one[1] > 0.04  && fcs_one[2] < -0.25 &&  (fcs_one [3] < - fcs_one [2])
-fcs_one[1] > 0.04  && fcs_one[2] < -0.35 &&  (fcs_one [3] < - fcs_one [2]*1.3)
-fcs_one[1] < -0.04 && fcs_one[2] < -0.15 &&  fcs_one [3] <  0
-fcs_one[1] < -0.04 && fcs_one[2] < -0.25 &&  (fcs_one [3] < - fcs_one [2]*0.9)
-fcs_one[1] < -0.04 && fcs_one[2] < -0.35 &&  (fcs_one [3] < - fcs_one [2])
-fcs_one[1] < -0.04 && fcs_one[2] < -0.4 &&  (fcs_one [3] < - fcs_one [2]*1.3)
-fcs_one[2] < -0.15 && fcs_one [3] < -0.1 && fcs_one[3] > -1
-fcs_one[2] < -0.20 &&  fcs_one [3] <  0
-fcs_one[2] < -0.25 &&  (fcs_one [3] < - fcs_one [2]*0.7)
-fcs_one[2] < -0.35 &&  (fcs_one [3] < - fcs_one [2])
-fcs_one[2] < -0.45 &&  (fcs_one [3] < - fcs_one [2]*1.3)
-fcs_one[2] < -0.5
-
-        EOF
-
-        cluster_rules["onset 8h down"] = <<-EOF.split("\n")
-
-"break" if clusters.include?("start increase 1h")
-"break" if clusters.include?("start decrease 1h")
-"break" if clusters.include?("start increase 2h")
-"break" if clusters.include?("start decrease 2h")
-"break" if clusters.include?("start increase 4h")
-"break" if clusters.include?("start decrease 4h")
-"break" if clusters.include?(" decrease to new level 4-24h")
-"break" if clusters.include?(" increase to new level 4-24h")
-
-fcs_one[3] < -0.15 && fcs_one[3] < -0.1 && fcs_one[4] > -1
-fcs_one[2] > 0.04 && fcs_one[3] < -0.1 &&  fcs_one[4] <  0
-fcs_one[2] > 0.04 && fcs_one[3] < -0.2 &&  (fcs_one[4] < - fcs_one[3]*0.9)
-fcs_one[2] > 0.04 && fcs_one[3] < -0.25 &&  (fcs_one[4] < - fcs_one[3])
-fcs_one[2] > 0.04 && fcs_one[3] < -0.4 && (fcs_one[4] < - fcs_one[3]*1.3)
-fcs_one[2] < -0.04 && fcs_one[3] < -0.15 &&  fcs_one[4] <  0
-fcs_one[2] < -0.04 && fcs_one[3] < -0.2 &&  (fcs_one[4] < - fcs_one[3]*0.9)
-fcs_one[2] < -0.04 && fcs_one[3] < -0.25 &&  (fcs_one[4] < - fcs_one[3])
-fcs_one[2] < -0.04 && fcs_one[3] < -0.4 && (fcs_one[4] < - fcs_one[3]*1.3)
-fcs_one[3] < -0.20 &&  fcs_one[4] <  0
-fcs_one[3] < -0.25 &&  (fcs_one[4] < - fcs_one[3]*0.7)
-fcs_one[3] < -0.3 &&  (fcs_one[4] < - fcs_one[3]*0.9)
-fcs_one[3] < -0.35 &&  (fcs_one[4] < - fcs_one[3])
-fcs_one[3] < -0.45 &&  (fcs_one[4] < - fcs_one[3]*1.3)
-fcs_two[3] <= -0.5
-
-        EOF
-
-        cluster_rules["onset 24h down"] = <<-EOF.split("\n")
-
-"break" if clusters.include?("start increase 1h")
-"break" if clusters.include?("start decrease 1h")
-"break" if clusters.include?("start increase 2h")
-"break" if clusters.include?("start decrease 2h")
-"break" if clusters.include?("start increase 4h")
-"break" if clusters.include?("start decrease 4h")
-"break" if clusters.include?("start increase 8h")
-"break" if clusters.include?("start decrease 8h")
-"break" if clusters.include?(" decrease to new level 4-24h")
-"break" if clusters.include?(" decrease to new level 8-24h")
-"break" if clusters.include?(" increase to new level 4-24h")
-"break" if clusters.include?(" increase to new level 8-24h")
-
-fcs_one[3] > 0.05 && fcs_ratio[4] < 0 && fcs_one[4] < -0.2
-fcs_one[3] < -0.05 && fcs_one[4] < -0.2
-fcs_one[4] < -0.25
-
-        EOF
-
-        #{{{ ONSET-OFFSET RULES
-
-        cluster_rules["onset 2h up offset 4h"] = <<-EOF.split("\n")
-
-"break" if clusters.include?("start increase 1h")
-"break" if clusters.include?("start decrease 1h")
-"break" if clusters.include?(" decrease to new level 4-24h")
-"break" if clusters.include?(" increase to new level 4-24h")
-
-fcs[0] > 0.04 && fcs_one[1] > 0.08 &&  fcs_one [2] > 0.05 && fcs_one[2] < 1 && fcs_ratio[2] < 0 && fcs_one[3] < -0.05
-fcs_one[1] > 0.12 &&  fcs_one [2] > 0.05 && fcs_one[3] > 0.05 && fcs_one[2] < 1 && fcs_ratio[2] < 0 && fcs_one[3] < -0.05
-fcs_one[1] > 0.12 &&  fcs_one [2] > 0.07 && fcs_one[3] > 0 && fcs_one[2] < 1 && fcs_ratio[2] < 0 && fcs_one[3] < -0.05
-fcs_one[1] > 0.12 &&  fcs_one [2] > 0.1 && fcs_one[2] < 1 && fcs_ratio[2] < 0 && fcs_one[3] < -0.1
-fcs[0] > 0.04 && fcs_one[1] > 0.12 && (fcs_one [2] > - fcs_one [1]*0.5)  && fcs_ratio[2] < 0 && fcs_one[3] < -0.05
-fcs_one[1] > 0.20 &&  fcs_one [2] > 0 && fcs_ratio[2] < 0 && fcs_one[3] < -0.05
-fcs_one[1] > 0.25 &&  (fcs_one [2] > - fcs_one [1]*0.5) && fcs_ratio[2] < 0 && fcs_one[3] < -0.05
-fcs_one[1] > 0.3 &&  (fcs_one [2] > - fcs_one [1]*0.7) && fcs_ratio[2] < 0 && fcs_one[3] < -0.05
-fcs_one[1] > 0.35 &&  (fcs_one [2] > - fcs_one [1]*0.9) && fcs_ratio[2] < 0 && fcs_one[3] < -0.05
-fcs_one[1] > 0.45 &&  (fcs_one [2] > - fcs_one [1]) && fcs_ratio[2] < 0 && fcs_one[3] < -0.05
-fcs_one[1] > 0.5 && fcs_ratio[2] < 0 && fcs_one[3] < -0.05
-
-        EOF
-
-        cluster_rules["onset 2h up offset 8h"] = <<-EOF.split("\n")
-
-"break" if clusters.include?("start increase 1h")
-"break" if clusters.include?("start decrease 1h")
-"break" if clusters.include?(" decrease to new level 8-24h")
-"break" if clusters.include?(" increase to new level 8-24h")
-
-fcs[0] > 0.04 && fcs_one[1] > 0.08 &&  fcs_one [2] > 0.05 && fcs_one[2] < 1 && fcs_ratio[3] < 0 && fcs_one[3] < -0.1
-fcs_one[1] > 0.12 &&  fcs_one [2] > 0.05 && fcs_one[3] > 0.05 && fcs_one[2] < 1 && fcs_ratio[3] < 0 && fcs_one[3] < -0.1
-fcs_one[1] > 0.12 &&  fcs_one [2] > 0.07 && fcs_one[3] > 0 && fcs_one[2] < 1 && fcs_ratio[3] < 0 && fcs_one[3] < -0.1
-fcs_one[1] > 0.12 &&  fcs_one [2] > 0.1 && fcs_one[2] < 1 && fcs_ratio[3] < 0 && fcs_one[3] < -0.1
-fcs[0] > 0.04 && fcs_one[1] > 0.12 && (fcs_one [2] > - fcs_one [1]*0.5)   && fcs_ratio[3] < 0 && fcs_one[3] < -0.1
-fcs_one[1] > 0.20 &&  fcs_one [2] > 0 && fcs_ratio[3] < 0 && fcs_one[3] < -0.1
-fcs_one[1] > 0.25 &&  (fcs_one [2] > - fcs_one [1]*0.5) && fcs_ratio[3] < 0 && fcs_one[3] < -0.1
-fcs_one[1] > 0.3 &&  (fcs_one [2] > - fcs_one [1]*0.7) && fcs_ratio[3] < 0 && fcs_one[3] < -0.1
-fcs_one[1] > 0.35 &&  (fcs_one [2] > - fcs_one [1]*0.9) && fcs_ratio[3] < 0 && fcs_one[3] < -0.1
-fcs_one[1] > 0.45 &&  (fcs_one [2] > - fcs_one [1]) && fcs_ratio[3] < 0 && fcs_one[3] < -0.1
-fcs_one[1] > 0.5 && fcs_ratio[3] < 0 && fcs_one[3] < -0.1
-
-        EOF
-        
-				#{{{ OTHER RULES
-
-        cluster_rules["increase to new level 4-24h"] = <<-EOF.split("\n")
-
-fcs_one[2] > 0.1 && fcs_one[2] < 0.8 && fcs_ratio[3] > -0.6 && fcs_ratio[3] < 0.2 && fcs[3] > 0 && (fcs[4] > fcs[3]*0.7) && (fcs[4] < fcs[3]*1.3)
-fcs_one[2] > 0.1 && fcs_one[2] < 0.8 && fcs_ratio[3] > -0.6 && fcs_ratio[3] < 0.2 && fcs[3] < 0 && (fcs[4] < fcs[3]*0.7) && (fcs[4] > fcs[3]*1.3)
-fcs_one[2] > 0.1 && fcs_ratio[3] > -0.4 && fcs_ratio[3] < 0.2 && fcs_ratio[4] > -1.5 && fcs_ratio[4] < 0.5 && fcs_ratio[3] < 0.2 && fcs[3] > 0 && (fcs[4] > fcs[3]*0.7) && (fcs[4] < fcs[3]*1.3)
-fcs_one[2] > 0.1 && fcs_ratio[3] > -0.4 && fcs_ratio[3] < 0.2 && fcs_ratio[4] > -1.5 && fcs_ratio[4] < 0.5 && fcs[3] < 0 && (fcs[4] < fcs[3]*0.7) && (fcs[4] > fcs[3]*1.3)
-fcs_one[1] > 0.1 && fcs_one[2] > 0.05 && fcs_one[2] < 0.8 && fcs_ratio[3] > -0.6 && fcs_ratio[3] < 0.2 && fcs[3] > 0 && (fcs[4] > fcs[3]*0.7) && (fcs[4] < fcs[3]*1.3)
-fcs_one[1] > 0.1 && fcs_one[2] > 0.05 && fcs_one[2] < 0.8 && fcs_ratio[3] > -0.6 && fcs_ratio[3] < 0.2 && fcs[3] < 0 && (fcs[4] < fcs[3]*0.7) && (fcs[4] > fcs[3]*1.3)
-fcs_one[1] > 0.1 && fcs_one[2] > 0.05 && fcs_ratio[3] > -0.4 && fcs_ratio[3] < 0.2 && fcs_ratio[4] > -1.5 && fcs_ratio[4] < 0.5 && fcs_ratio[3] < 0.2 && fcs[3] > 0 && (fcs[4] > fcs[3]*0.7) && (fcs[4] < fcs[3]*1.3)
-fcs_one[1] > 0.1 && fcs_one[2] > 0.05 && fcs_ratio[3] > -0.4 && fcs_ratio[3] < 0.2 && fcs_ratio[4] > -1.5 && fcs_ratio[4] < 0.5 && fcs[3] < 0 && (fcs[4] < fcs[3]*0.7) && (fcs[4] > fcs[3]*1.3)
-
-        EOF
-
-
-
-
-        cluster_rules["decrease to new level 4-24h"] = <<-EOF.split("\n")
-
-fcs_one[2] < -0.1 && fcs_one[2] > -0.8 && fcs_ratio[2] >= 0.2 && fcs_ratio[3] > -0.6 && fcs_ratio[3] < 0.2 && fcs[3] > 0 && (fcs[4] > fcs[3]*0.7) && (fcs[4] < fcs[3]*1.3)
-fcs_one[2] < -0.1 && fcs_one[2] > -0.8 && fcs_ratio[2] >= 0.2 && fcs_ratio[3] > -0.6 && fcs_ratio[3] < 0.2 && fcs[3] < 0 && (fcs[4] < fcs[3]*0.7) && (fcs[4] > fcs[3]*1.3)
-fcs_one[2] < -0.1 && fcs_ratio[2] >= 0.2 && fcs_ratio[3] > -0.4 && fcs_ratio[3] < 0.2 && fcs[3] > 0 && (fcs[4] > fcs[3]*0.7) && (fcs[4] < fcs[3]*1.3)
-fcs_one[2] < -0.1 && fcs_ratio[2] >= 0.2 && fcs_ratio[3] > -0.4 && fcs_ratio[3] < 0.2 && fcs[3] < 0 && (fcs[4] < fcs[3]*0.7) && (fcs[4] > fcs[3]*1.3)
-fcs_one[1] < -0.1 && fcs_one[2] < 0 && fcs_one[2] > -0.8 && fcs_ratio[2] >= 0.2 && fcs_ratio[3] > -0.6 && fcs_ratio[3] < 0.2 && fcs[3] > 0 && (fcs[4] > fcs[3]*0.7) && (fcs[4] < fcs[3]*1.3)
-fcs_one[1] < -0.1 && fcs_one[2] < 0 && fcs_one[2] > -0.8 && fcs_ratio[2] >= 0.2 && fcs_ratio[3] > -0.6 && fcs_ratio[3] < 0.2 && fcs[3] < 0 && (fcs[4] < fcs[3]*0.7) && (fcs[4] > fcs[3]*1.3)
-fcs_one[1] < -0.1 && fcs_one[2] < 0 && fcs_ratio[2] >= 0.2 && fcs_ratio[3] > -0.4 && fcs_ratio[3] < 0.2 && fcs[3] > 0 && (fcs[4] > fcs[3]*0.7) && (fcs[4] < fcs[3]*1.3)
-fcs_one[1] < -0.1 && fcs_one[2] < 0 && fcs_ratio[2] >= 0.2 && fcs_ratio[3] > -0.4 && fcs_ratio[3] < 0.2 && fcs[3] < 0 && (fcs[4] < fcs[3]*0.7) && (fcs[4] > fcs[3]*1.3)
-
-        EOF
-
-
-
-
-
-
-
-        cluster_rules["increase to new level 8-24h"] = <<-EOF.split("\n")
-
-"break" if clusters.include?("increase to new level 4-24h")
-
-fcs_one[3] > 0.1 && fcs_ratio[3] > 0 && fcs_ratio[4] > -0.6 && fcs_ratio[4] < 0.2
-fcs_one[2] > 0.1 && fcs_one[3] > 0.05 && fcs_ratio[3] > 0 && fcs_ratio[4] > -0.6 && fcs_ratio[4] < 0.2
-
-        EOF
-
-
-
-        cluster_rules["decrease to new level 8-24h"] = <<-EOF.split("\n")
-
-"break" if clusters.include?("decrease to new level 4-24h")
-
-fcs_one[3] < -0.1 && fcs_ratio[3] > 0 && fcs_ratio[4] > -0.6 && fcs_ratio[4] < 0.2
-fcs_one[2] < -0.1 && fcs_one[3] < -0.05 && fcs_ratio[3] > 0 && fcs_ratio[4] > -0.6 && fcs_ratio[4] < 0.2
-
-        EOF
-
-
-        cluster_rules["persistent increase 1-24h"] = <<-EOF.split("\n")
-
-fcs[0] > 0.05 && fcs_one[1] > 0.05 &&  fcs_one [2] > 0.05 && fcs_one[3] > 0 && fcs_one[4] > 0.1 && fcs_one[3] < 1
-fcs[0] > 0.05 && fcs_one[1] > 0.05 &&  fcs_one [2] > 0 && fcs_one[3] > 0.05 && fcs_one[4] > 0.1 && fcs_one[3] < 1
-fcs_one[1] > 0.05 && fcs_one[2] > 0.05 && fcs_one[3] > 0.05 && fcs_one[4] > 0.1 && fcs_one[3] < 1
-fcs_one[1] >= 0.1 && fcs_one[2] > 0.05 && fcs_one[3] > 0 && fcs_one[4] > 0.1
-fcs_one[1] >= 0.15 && fcs_one[2] > 0 && fcs_one[3] > 0 && fcs_one[4] > 0.1
-
-        EOF
-
-
-        cluster_rules["persistent decrease 1-24h"] = <<-EOF.split("\n")
-
-fcs[0] < -0.05 && fcs_one[1] < -0.05 &&  fcs_one [2] < -0.05 && fcs_one[3] < 0 && fcs_ratio[4] > 0.1 && fcs_one[3] > -1
-fcs[0] < -0.05 && fcs_one[1] < -0.05 &&  fcs_one [2] < 0 && fcs_one[3] < -0.05 && fcs_ratio[4] > 0.1 && fcs_one[3] > -1
-fcs_one[1] <= -0.05 && fcs_one[2] < -0.05 && fcs_one[3] <0 && fcs_ratio[4] > 0.1 && fcs_one[3] > -1
-fcs_one[1] <= -0.1 && fcs_one[2] < -0.05 && fcs_one[3] < 0 && fcs_ratio[4] > 0.1
-fcs_one[1] <= -0.15 && fcs_one[2] < 0 && fcs_one[3] < 0 && fcs_ratio[4] > 0.1
-
-        EOF
-
-
-
-        cluster_rules["persistent increase 2-24h"] = <<-EOF.split("\n")
-
-"break" if clusters.include?("persistent increase 1-24h")
-
-fcs_two[2] >= 0.12 && fcs_one[1] > 0.05 && fcs_one[2] > 0.05 &&  fcs_one [3] > 0  && fcs_ratio[4] > 0.1 && fcs_one[3] < 0.8
-fcs_two[2] >= 0.12 && fcs_one[1] > 0.05 && fcs_one[2] > 0 &&  fcs_one [3] > 0.05  && fcs_ratio[4] > 0.1 && fcs_one[3] < 0.8
-fcs_one[2] > 0.1 && fcs_one[2] < 0.2 && fcs_one [1] < 0 && fcs_ratio[2] < -0.2 && fcs_one [3] > 0 && fcs_ratio[4] > 0.1 && fcs_one[3] < 0.6
-fcs_one[2] >= 0.1 && fcs_one[3] > 0.05 && fcs_ratio[4] > 0.1
-fcs_one[2] >= 0.15 && fcs_one[3] > 0 && fcs_ratio[4] > 0.1
-
-        EOF
-
-
-        cluster_rules["persistent decrease 2-24h"] = <<-EOF.split("\n")
-
-"break" if clusters.include?("persistent decrease 1-24h")
-
-fcs_two[2] <= -0.12 && fcs_one[1] < -0.05 && fcs_one[2] < -0.05 &&  fcs_one [3] < 0 && fcs_ratio[4] > 0.1 && fcs_one[3] > -0.8
-fcs_two[2] <= -0.12 && fcs_one[1] < -0.05 && fcs_one[2] < 0 &&  fcs_one [3] < -0.05 && fcs_ratio[4] > 0.1 && fcs_one[3] > -0.8
-fcs_one[2] < -0.1 && fcs_one[2] > -0.2 && fcs_one [1] > 0 && fcs_ratio[2] < -0.2 && fcs_one [3] < 0 && fcs_one[3] > -0.8
-fcs_one[2] <= -0.1 && fcs_one[3] < -0.05 && fcs_ratio[4] > 0.1
-fcs_one[2] <= -0.15 && fcs_one[3] < 0 && fcs_ratio[4] > 0.1
-
-        EOF
-
-        cluster_rules
-    end
-
+fcs_one[2] < -0.20 && (fcs_one[3] > -fcs_one[2]*0.80)
+    EOF
+
+    cluster_rules["start increase 4h"] = <<-EOF.split("\n")
+"break" if clusters.include?("start increase 1h") && ! clusters.include?("transient increase 1h to 2h") 
+"break" if clusters.include?("start increase 2h") && ! clusters.include?("transient increase 1h to 2h")
+fcs_one[2] > 0.10 && fcs_one[3] > 0.10 && (fcs_one[4] < fcs_one[3]*10) 
+fcs_one[2] > 0.20 && (fcs_one[3] > - fcs_one[2]*0.90*(fcs_one[2]/0.20)*(fcs_one[2]/0.20)) 
+fcs_one[2] > 0.30    
+    EOF
+
+    cluster_rules["refactored start increase 4h"] = <<-EOF.split("\n")
+"break" if clusters.include?("refactored start increase 1h") && ! clusters.include?("transient increase 1h to 2h") 
+"break" if clusters.include?("refactored start increase 2h") && ! clusters.include?("transient increase 1h to 2h")
+    AGS.rule(fcs_one[2], fcs_one[3], low_min_4h, mid_min_4h, high_min_4h, next_min_4h, low_multiplier_4h, mid_multiplier_4h)
+    EOF
+
+    cluster_rules["start decrease 4h"] = <<-EOF.split("\n")
+"break" if clusters.include?("start decrease 1h") && ! clusters.include?("transient decrease 1h to 2h") 
+"break" if clusters.include?("start decrease 2h") && ! clusters.include?("transient decrease 1h to 2h") 
+fcs_one[2] < -0.10 && fcs_one[3] < -0.10 && (fcs_one[4] > fcs_one[3]*10) 
+fcs_one[2] < -0.20 && (fcs_one[3] < - fcs_one[2]*0.90*(fcs_one[2]/0.20)*(fcs_one[2]/0.20)) 
+fcs_one[2] < -0.30
+    EOF
+
+    cluster_rules["refactored start decrease 4h"] = <<-EOF.split("\n")
+"break" if clusters.include?("refactored start decrease 1h") && ! clusters.include?("transient decrease 1h to 2h") 
+"break" if clusters.include?("refactored start decrease 2h") && ! clusters.include?("transient decrease 1h to 2h")
+    AGS.rule(-fcs_one[2], -fcs_one[3], low_min_4h, mid_min_4h, high_min_4h, next_min_4h, low_multiplier_4h, mid_multiplier_4h)
+    EOF
+
+    cluster_rules["start increase 8h"] = <<-EOF.split("\n")
+"break" if clusters.include?("start increase 1h") && ! clusters.include?("transient increase 1h to 2h") && ! clusters.include?("transient increase 1h to 4h") && ! clusters.include?("transient increase 2h to 4h")
+"break" if clusters.include?("start increase 2h") && ! clusters.include?("transient increase 1h to 2h") && ! clusters.include?("transient increase 1h to 4h") && ! clusters.include?("transient increase 2h to 4h")
+"break" if clusters.include?("start increase 4h") && ! clusters.include?("transient increase 1h to 2h") && ! clusters.include?("transient increase 1h to 4h") && ! clusters.include?("transient increase 2h to 4h")
+fcs_one[3] > 0.10 && fcs_one[4] > 0.15 && (fcs_one[4] < fcs_one[3]*12)
+fcs_one[3] > 0.20 && (fcs_one[4] > - fcs_one[3]*0.90*(fcs_one[3]/0.20)*(fcs_one[3]/0.20)) 
+fcs_one[3] > 0.30 
+    EOF
+
+    cluster_rules["refactored start increase 8h"] = <<-EOF.split("\n")
+"break" if clusters.include?("refactored start increase 1h") && ! clusters.include?("transient increase 1h to 2h") && ! clusters.include?("transient increase 1h to 4h") && ! clusters.include?("transient increase 2h to 4h")
+"break" if clusters.include?("refactored start increase 2h") && ! clusters.include?("transient increase 1h to 2h") && ! clusters.include?("transient increase 1h to 4h") && ! clusters.include?("transient increase 2h to 4h")
+"break" if clusters.include?("refactored start increase 4h") && ! clusters.include?("transient increase 1h to 2h") && ! clusters.include?("transient increase 1h to 4h") && ! clusters.include?("transient increase 2h to 4h")
+    AGS.rule(fcs_one[3], fcs_one[4], low_min_8h, mid_min_8h, high_min_8h, next_min_8h, low_multiplier_8h, mid_multiplier_8h)
+    EOF
+
+    cluster_rules["start decrease 8h"] = <<-EOF.split("\n")
+"break" if clusters.include?("start decrease 1h") && ! clusters.include?("transient decrease 1h to 2h") && ! clusters.include?("transient decrease 1h to 4h") && ! clusters.include?("transient decrease 2h to 4h")
+"break" if clusters.include?("start decrease 2h") && ! clusters.include?("transient decrease 1h to 2h") && ! clusters.include?("transient decrease 1h to 4h") && ! clusters.include?("transient decrease 2h to 4h")
+"break" if clusters.include?("start decrease 4h") && ! clusters.include?("transient decrease 1h to 2h") && ! clusters.include?("transient decrease 1h to 4h") && ! clusters.include?("transient decrease 2h to 4h")
+fcs_one[3] < -0.10 && fcs_one[4] < -0.10
+fcs_one[3] < -0.20 && (fcs_one[4] < - fcs_one[3]*0.90*(fcs_one[3]/0.20)*(fcs_one[3]/0.20)) 
+fcs_one[3] < -0.30
+    EOF
+
+    cluster_rules["refactored start decrease 8h"] = <<-EOF.split("\n")
+"break" if clusters.include?("refactored start decrease 1h") && ! clusters.include?("transient decrease 1h to 2h") && ! clusters.include?("transient decrease 1h to 4h") && ! clusters.include?("transient decrease 2h to 4h")
+"break" if clusters.include?("refactored start decrease 2h") && ! clusters.include?("transient decrease 1h to 2h") && ! clusters.include?("transient decrease 1h to 4h") && ! clusters.include?("transient decrease 2h to 4h")
+"break" if clusters.include?("refactored start decrease 4h") && ! clusters.include?("transient decrease 1h to 2h") && ! clusters.include?("transient decrease 1h to 4h") && ! clusters.include?("transient decrease 2h to 4h")
+    AGS.rule(-fcs_one[3], -fcs_one[4], low_min_4h, mid_min_4h, high_min_4h, next_min_4h, low_multiplier_4h, mid_multiplier_4h)
+    EOF
+
+    cluster_rules["start increase 24h"] = <<-EOF.split("\n")
+"break" if clusters.include?("start increase 1h") && ! clusters.include?("transient increase 1h to 2h") && ! clusters.include?("transient increase 1h to 4h") && ! clusters.include?("transient increase 1h to 8h") && ! clusters.include?("transient increase 2h to 4h") && ! clusters.include?("transient increase 2h to 8h") && ! clusters.include?("transient increase 4h to 8h")
+"break" if clusters.include?("start increase 2h") && ! clusters.include?("transient increase 1h to 2h") && ! clusters.include?("transient increase 1h to 4h") && ! clusters.include?("transient increase 1h to 8h") && ! clusters.include?("transient increase 2h to 4h") && ! clusters.include?("transient increase 2h to 8h") && ! clusters.include?("transient increase 4h to 8h")
+"break" if clusters.include?("start increase 4h") && ! clusters.include?("transient increase 1h to 2h") && ! clusters.include?("transient increase 1h to 4h") && ! clusters.include?("transient increase 1h to 8h") && ! clusters.include?("transient increase 2h to 4h") && ! clusters.include?("transient increase 2h to 8h") && ! clusters.include?("transient increase 4h to 8h")
+"break" if clusters.include?("start increase 8h") && ! clusters.include?("transient increase 1h to 2h") && ! clusters.include?("transient increase 1h to 4h") && ! clusters.include?("transient increase 1h to 8h") && ! clusters.include?("transient increase 2h to 4h") && ! clusters.include?("transient increase 2h to 8h") && ! clusters.include?("transient increase 4h to 8h")
+fcs_one[4] > 0.30
+    EOF
+
+    cluster_rules["refactored start increase 24h"] = <<-EOF.split("\n")
+"break" if clusters.include?("refactored start increase 1h") && ! clusters.include?("transient increase 1h to 2h") && ! clusters.include?("transient increase 1h to 4h") && ! clusters.include?("transient increase 1h to 8h") && ! clusters.include?("transient increase 2h to 4h") && ! clusters.include?("transient increase 2h to 8h") && ! clusters.include?("transient increase 4h to 8h")
+"break" if clusters.include?("refactored start increase 2h") && ! clusters.include?("transient increase 1h to 2h") && ! clusters.include?("transient increase 1h to 4h") && ! clusters.include?("transient increase 1h to 8h") && ! clusters.include?("transient increase 2h to 4h") && ! clusters.include?("transient increase 2h to 8h") && ! clusters.include?("transient increase 4h to 8h")
+"break" if clusters.include?("refactored start increase 4h") && ! clusters.include?("transient increase 1h to 2h") && ! clusters.include?("transient increase 1h to 4h") && ! clusters.include?("transient increase 1h to 8h") && ! clusters.include?("transient increase 2h to 4h") && ! clusters.include?("transient increase 2h to 8h") && ! clusters.include?("transient increase 4h to 8h")
+"break" if clusters.include?("refactored start increase 8h") && ! clusters.include?("transient increase 1h to 2h") && ! clusters.include?("transient increase 1h to 4h") && ! clusters.include?("transient increase 1h to 8h") && ! clusters.include?("transient increase 2h to 4h") && ! clusters.include?("transient increase 2h to 8h") && ! clusters.include?("transient increase 4h to 8h")
+    AGS.rule(fcs_one[4], 0, low_min_24h, mid_min_24h, high_min_24h, next_min_24h, low_multiplier_24h, mid_multiplier_24h)
+
+    EOF
+
+
+    cluster_rules["start decrease 24h"] = <<-EOF.split("\n")
+"break" if clusters.include?("start decrease 1h") && ! clusters.include?("transient decrease 1h to 2h") && ! clusters.include?("transient decrease 1h to 4h") && ! clusters.include?("transient decrease 1h to 8h") && ! clusters.include?("transient decrease 2h to 4h") && ! clusters.include?("transient decrease 2h to 8h") && ! clusters.include?("transient decrease 4h to 8h")
+"break" if clusters.include?("start decrease 2h") && ! clusters.include?("transient decrease 1h to 2h") && ! clusters.include?("transient decrease 1h to 4h") && ! clusters.include?("transient decrease 1h to 8h") && ! clusters.include?("transient decrease 2h to 4h") && ! clusters.include?("transient decrease 2h to 8h") && ! clusters.include?("transient decrease 4h to 8h")
+"break" if clusters.include?("start decrease 4h") && ! clusters.include?("transient decrease 1h to 2h") && ! clusters.include?("transient decrease 1h to 4h") && ! clusters.include?("transient decrease 1h to 8h") && ! clusters.include?("transient decrease 2h to 4h") && ! clusters.include?("transient decrease 2h to 8h") && ! clusters.include?("transient decrease 4h to 8h")
+"break" if clusters.include?("start decrease 8h") && ! clusters.include?("transient decrease 1h to 2h") && ! clusters.include?("transient decrease 1h to 4h") && ! clusters.include?("transient decrease 1h to 8h") && ! clusters.include?("transient decrease 2h to 4h") && ! clusters.include?("transient decrease 2h to 8h") && ! clusters.include?("transient decrease 4h to 8h")
+
+fcs_one[4] < -0.30
+    EOF
+
+    cluster_rules["refactored start decrease 24h"] = <<-EOF.split("\n")
+"break" if clusters.include?("refactored start decrease 1h") && ! clusters.include?("transient decrease 1h to 2h") && ! clusters.include?("transient decrease 1h to 4h") && ! clusters.include?("transient decrease 1h to 8h") && ! clusters.include?("transient decrease 2h to 4h") && ! clusters.include?("transient decrease 2h to 8h") && ! clusters.include?("transient decrease 4h to 8h")
+"break" if clusters.include?("refactored start decrease 2h") && ! clusters.include?("transient decrease 1h to 2h") && ! clusters.include?("transient decrease 1h to 4h") && ! clusters.include?("transient decrease 1h to 8h") && ! clusters.include?("transient decrease 2h to 4h") && ! clusters.include?("transient decrease 2h to 8h") && ! clusters.include?("transient decrease 4h to 8h")
+"break" if clusters.include?("refactored start decrease 4h") && ! clusters.include?("transient decrease 1h to 2h") && ! clusters.include?("transient decrease 1h to 4h") && ! clusters.include?("transient decrease 1h to 8h") && ! clusters.include?("transient decrease 2h to 4h") && ! clusters.include?("transient decrease 2h to 8h") && ! clusters.include?("transient decrease 4h to 8h")
+"break" if clusters.include?("refactored start decrease 8h") && ! clusters.include?("transient decrease 1h to 2h") && ! clusters.include?("transient decrease 1h to 4h") && ! clusters.include?("transient decrease 1h to 8h") && ! clusters.include?("transient decrease 2h to 4h") && ! clusters.include?("transient decrease 2h to 8h") && ! clusters.include?("transient decrease 4h to 8h")
+    AGS.rule(-fcs_one[4], 0, low_min_24h, mid_min_24h, high_min_24h, next_min_24h, low_multiplier_24h, mid_multiplier_24h)
+    EOF
+
+    cluster_rules
+  end
 end

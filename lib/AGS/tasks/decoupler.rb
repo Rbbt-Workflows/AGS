@@ -1,48 +1,32 @@
 
+#require 'AGS/tasks/decoupler_old'
 module AGS
 
-  TREATMENTS = %w(DMSO FiveZ INT_FiveZ_PI INT_PD_PI PD PI)
-  TIME_POINTS = [1,2,4,8,24]
-  
+  def self.setup_name(treatment, time_point, data_type, synthesis_criteria, synthesis, dynamic, finegrained_degradation)
+    [treatment, time_point, data_type, synthesis_criteria, "synth=#{synthesis}", "dynamic=#{dynamic}", "finegrained_degradation=#{finegrained_degradation}"] * "-"
+  end
 
-  dep :vetted_genes, :jobname => "Default"
+  dep :vetted_genes
   input :treatment, :select, "Treatment", nil, :select_options => TREATMENTS, :required => true
   input :time_point, :select, "Timepoint", nil, :select_options => TIME_POINTS, :required => true
-  input :synthesis, :boolean, "Filter for synthesis genes"
-  input :dynamic, :boolean, "Filter for dynamic cluster profiles"
-  input :data_type, :select, "Values to use", :ext_fc, :select_options => %w(fc ext_fc binary)
-  input :dynamic_subset, :select, "Increase, decrease or both", :both, :select_options => %w(increase decrease both)
-  task :decoupler_matrix => :tsv do |treatment,time_point,synthesis,dynamic,data_type,dynamic_subset|
+  input :data_type, :select, "Values to use", :ext_fc, :select_options => %w(fc fc0 ext_fc binary range)
+  task :timepoint_matrix => :tsv do |treatment,time_point,data_type|
     time_point = time_point.to_i
     sample_name = [treatment, time_point] * "-T"
     matrix = TSV.setup({}, :key_field => "Associated Gene Name", :fields => [sample_name], :type => :single, :cast => :to_f)
 
     fc_fields = TIME_POINTS.collect{|t| ["FC_#{treatment}", "T#{t}"] * "." }
-    TSV.traverse step(:vetted_genes), :into => matrix do |ens,values,fields|
+    TSV.traverse step(:vetted_genes), :into => matrix do |name,values,fields|
+      name = name.first if Array === name
       NamedArray.setup(values, fields)
-      next if synthesis && ! values["Vetted gene"].include?("true")
-      name = values["Associated Gene Name"].first
       fc_values = values.values_at(*fc_fields).collect{|v| v.first.to_f}
-      cluters = values[treatment + ": FC clusters"]
-      increase = cluters.include? "start increase #{time_point}h"
-      decrease = cluters.include? "start decrease #{time_point}h"
-
-      if dynamic
-        case dynamic_subset.to_sym
-        when :both
-          next unless increase || decrease
-        when :increase
-          next unless increase
-        when :decrease
-          next unless decrease
-        else
-          raise ParameterException, "Unkown dynamic_subset #{dynamic_subset}"
-        end
-      end
+      clusters = values[treatment + ": FC clusters"]
 
       time_point_index =  TIME_POINTS.index time_point
 
       value = case data_type.to_sym
+              when :fc0
+                fc = fc_values[time_point_index]
               when :fc
                 fc = fc_values[time_point_index]
                 fc -= fc_values[time_point_index-1] unless time_point_index == 0
@@ -59,6 +43,25 @@ module AGS
                 else
                   0
                 end
+              when :range
+                fc = nil
+                clusters.each{|cluster| 
+                  range = cluster.split(" ").last
+                  range_start, range_end = range.split("-")
+                  range_start = range_start.to_i
+                  range_end = range_end.nil? ? range_start : range_end.to_i
+                  next unless time_point == range_start
+                  i_start = TIME_POINTS.index(range_start)
+                  i_end = TIME_POINTS.index(range_end)
+
+                  fc = fc_values[i_start]
+                  fc -= fc_values[i_start-1] unless i_start == 0
+
+                  (i_start+1..i_end).each do |ext_i|
+                    fc += (fc_values[ext_i] - fc_values[ext_i-1]) / (TIME_POINTS[ext_i] - TIME_POINTS[ext_i-1])
+                  end
+                }
+                fc.nil? ? 0 : fc
               else
                 raise
               end
@@ -69,12 +72,71 @@ module AGS
     matrix.transpose("Sample")
   end
 
-  dep :decoupler_matrix
-  dep SaezLab, :regulome, :jobname => "Default"
-  dep_task :timepoint_decoupler_pre, SaezLab, :decoupler, :matrix => :decoupler_matrix, :network => :regulome, :min_n => 3
+  dep :vetted_genes, :jobname => "Default"
+  input :treatment, :select, "Treatment", nil, :select_options => TREATMENTS, :required => true
+  input :time_point, :select, "Timepoint", nil, :select_options => TIME_POINTS, :required => true
+  input :synthesis, :boolean, "Filter for synthesis genes", false
+  input :dynamic, :boolean, "Filter for dynamic cluster profiles"
+  input :dynamic_subset, :select, "Increase, decrease or both", :both, :select_options => %w(increase decrease both)
+  input :finegrained_degradation, :boolean, "Filter for finegrained dynamic degradation", true
+  input :target_subset, :array, "Subset of genes to consider" 
+  task :decoupler_targets => :array do |treatment,time_point,synthesis,dynamic,dynamic_subset,finegrained_degradation,target_subset|
+
+    noisy_genes = Rbbt.data.noisy_genes.list
+    TSV.traverse step(:vetted_genes), :into => :stream do |name,values,fields|
+      name = name.first if Array === name
+      NamedArray.setup(values, fields)
+      next if synthesis && ! values["Vetted synthesis gene"].include?("true")
+      next if noisy_genes.include?(name)
+      next if target_subset && ! target_subset.include?(name)
+      cluters = values[treatment + ": FC clusters"]
+      #increase = cluters.include? "increase #{time_point}"
+      #decrease = cluters.include? "decrease #{time_point}"
+      increase = cluters.select{|c| c == "increase #{time_point}" || c.include?("increase #{time_point}-") }.any?
+      decrease = cluters.select{|c| c == "decrease #{time_point}" || c.include?("decrease #{time_point}-") }.any?
+
+      if dynamic
+        case dynamic_subset.to_sym
+        when :both
+          next unless increase || decrease
+        when :increase
+          next unless increase
+        when :decrease
+          next unless decrease
+        else
+          raise ParameterException, "Unkown dynamic_subset #{dynamic_subset}"
+        end
+      end
+
+      if finegrained_degradation and values["Degradation timepoints"].include?([treatment, time_point]*":")
+        next
+      end
+
+      name
+    end
+  end
+
+  dep SaezLab, :regulome
+  dep :decoupler_targets
+  task :filtered_regulome => :tsv do
+    targets = step(:decoupler_targets).load
+    interesting_tfs = Rbbt.data.interesting_tfs.list
+    dumper = TSV::Dumper.new step(:regulome).load.options
+    dumper.init
+    TSV.traverse step(:regulome), :into => dumper do |id,values|
+      tf, tg, weight = values
+      next unless targets.include?(tg)
+      next unless interesting_tfs.include?(tf)
+      [id, [tf, tg, weight]]
+    end
+  end
+
+  dep :timepoint_matrix
+  dep :filtered_regulome
+  dep_task :timepoint_decoupler_pre, SaezLab, :decoupler, :matrix => :timepoint_matrix, :network => :filtered_regulome, :min_n => 5
 
   dep :timepoint_decoupler_pre
-  input :threshold, :float, "P-value threshold", 0.5
+  input :threshold, :float, "P-value threshold", 0.05
   task :timepoint_decoupler => :tsv do |threshold|
     tsv = step(:timepoint_decoupler_pre).load.transpose("Associated Gene Name")
 
@@ -102,12 +164,18 @@ module AGS
     TREATMENTS.each do |treatment|
       TIME_POINTS.each do |time_point|
         [true, false].each do |synthesis|
+          next if synthesis
           [true, false].each do |dynamic|
-            [:fc, :binary, :ext_fc].each do |data_type|
-              [:mayority, :one, :two, :three].each do |synthesis_criteria|
-                setup_name = [treatment, time_point, data_type, synthesis_criteria, "synth=#{synthesis}", "dynamic=#{dynamic}"] * "-"
-                setup_options = {:treatment => treatment, :time_point => time_point, :synthesis => synthesis, :dynamic => dynamic, :data_type => data_type, :synthesis_criteria => synthesis_criteria}
-                jobs << {:inputs => options.merge(setup_options), :jobname => setup_name}
+            next if dynamic
+            [true, false].each do |finegrained_degradation|
+              next if finegrained_degradation
+              [:fc, :fc0, :binary, :ext_fc].each do |data_type|
+                [:mayority, :one, :two, :three].each do |synthesis_criteria|
+                  next if synthesis_criteria != :mayority
+                  setup_name = AGS.setup_name(treatment, time_point, data_type, synthesis_criteria, synthesis, dynamic, finegrained_degradation)
+                  setup_options = {:treatment => treatment, :time_point => time_point, :synthesis => synthesis, :dynamic => dynamic, :data_type => data_type, :synthesis_criteria => synthesis_criteria, :finegrained_degradation => finegrained_degradation}
+                  jobs << {:inputs => options.merge(setup_options), :jobname => setup_name}
+                end
               end
             end
           end
@@ -117,9 +185,12 @@ module AGS
     jobs
   end
   task :timepoint_decoupler_suite => :tsv do
+    not_expressed = Rbbt.data.not_expressed.list
+    noisy_genes = Rbbt.data.noisy_genes.list
     dependencies.inject(nil) do |acc,dep|
       next if dep.error?
       tsv = dep.load
+      tsv = tsv.subset(tsv.keys - not_expressed - noisy_genes)
       tsv.fields = [dep.clean_name]
       if acc.nil?
         acc = tsv

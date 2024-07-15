@@ -1,0 +1,48 @@
+#Cluster	# genes	A	A1	A2	A3	A4	A5	A7	A8	B	B1	B2	B3	B4	B5	B7	B8	C	C1	C2	C3	C4	C5	C7	C8	E	E1	E2	E3	F	F1	G	G1	G2	G3	G4	G6	G7	G8	H		I	I2	J	J1	J2	J3	J4	J5	J6	J7	J8	K	K1	K2	K3	L	L1	L2		5Z_PI	PD_PI	PI	5Z	PD	DMSO	#
+P4_I6_M4	45	A	A1															C	C1																									J	J1																IE_u_4h	IE_u_4h		IE_u_4h	IE_u_4h	IE_u_4h	1
+P2_I9_M8	75	A	A1		A3			A7										C	C1		C3			C7																				J	J1		J3				J7										IE_u_4h_transient	IE_u_4h_transient	IE_u_4h_transient	E_up_4h_transient	E_up_4h_transient		2
+P3_I6_M16	36	A	A1		A3			A7										C	C1		C3			C7																				J	J1		J3				J7										IE_u_4h_transient	IE_u_4h_transient	IE_u_4h_transient	DE_d_transient_24h	DE_d_transient_24h		3
+P5_I3_M2	37	A	A1		A3		A5											C	C1		C3		C5																					J	J1		J3		J5												IE_u_4h_transient	IE_u_4h_transient	E_u_4h_transient	E_u_8h	E_u_8h	E_u	4
+P4_I6_M3	43	A	A1		A3			A7										C	C1		C3			C7																				J	J1		J3				J7										IE_u_4h_transient_24h	IE_u_4h_transient_24h	IE_u_4h_transient_24h				5
+P7_I3_M2	37	A		A2					A8									C		C2					C8																			J		J2						J8									IE_u_8h	IE_u_8h	IE_u_8h	IE_d_4h_transient_8h	D_u_8h		6
+P4_I6_M6	37	A		A2					A8									C		C2					C8																			J		J2						J8									IE_u_8h	IE_u_8h	IE_u_8h				7
+P2_I9_M9	130	A		A2					A8									C		C2					C8																			J		J2						J8									IE_u_8h	IE_u_8h	IE_u_4h				8
+P1_I11_M6	90	A		A2		A4												C		C2		C4																						J		J2		J4													IE_u_8h_transient	IE_u_8h_transient	IE_u_8h_transient	IE_u_8h_transient	IE_u_8h_transient		9
+P7_I3_M1	33									B	B1		B3			B7		C	C1		C3			C7																				J	J1		J3				J7										E_u_2-4h_transient_8h	E_u_2-4h_transient_8h	E_u_2-4h_transient_8h	E_u_4h_transient_8h	E_u_4h_transient_8h	E_u_4h_transient_8h	10
+P1_I11_M3	243									B	B1					B7		C	C1					C7																				J	J1						J7										E_u_4h	E_u_4h	E_u_4h	E_u_8h	E_u_8h	E_u 	11
+P3_I6_M10	55									B	B1				B5			C	C1				C5																					J	J1				J5												E_u_4h	E_u_4h		E_u_8h	E_u_8h		12
+P2_I9_M3	205									B	B1		B3			B7		C	C1		C3			C7																				J	J1		J3				J7										E_u_4h_transient	E_u_4h_transient	E_u_4h_transient	E_u_8h	E_u_8h		13
+P4_I6_M5	36									B	B1		B3			B7		C	C1		C3			C7																				J	J1		J3				J7										E_u_4h_transient_	E_u_4h_transient_	E_u_4h_transient_				14
+P2_I9_M5	168									B		B2					B8	C		C2					C8																			J		J2						J8									E_u_8h	E_u_8h	E_u_8h	DE_u_8h	DE_u_8h	DE_u	15
+P1_I11_M7	133									B		B2		B4				C		C2		C4																						J		J2		J4													E_u_8h_transient_24h	E_u_8h		E_u_8h_transient_24h	E_u_8h		16
+P1_I11_M8	54																									E	E1																										K	K1							DE_up_8h_transient	DE_up_8h_transient		DE_up_8h_transient	DE_up_8h_transient	down from 8h	17
+P3_I6_M9	54																									E	E1		E3																								K	K1		K3					DE_u_8h	E_u_8h	DE_u_8h	D_u_8h	D_u_8h		18
+P2_I9_M10	71																									E	E1																										K	K1							DE_u_8h	DE_u_8h	DE_u_8h	DE_u_8h_transient	DE_u_8h	DE_u_8h	19
+P1_I11_M2	794																									E	E1	E2																									K	K1	K2						DE_u_8h	DE_u_8h	DE_u_8h	DE_u_8h	DE_u_8h	D_u	20
+P1_I11_M4	226																									E																											K								DE_u	DE_u	DE_u	DE_u	DE_u	DE_u	21
+P6_I3_M1	37																									E																											K								DE_u			DE_u	DE_u		22
+P3_I6_M8	52																													F	F1																														D_u_8h	D_u_8h	D_u_8h	D_u_8h	D_u_8h	D_u_8h	23
+P2_I9_M6	145																													F																											L	L1			D_u	D_u	D_u	D_u	D_u	D_u	24
+P4_I6_M2	50																															G		G2		G4			G8					J		J2		J4				J8					L				IE_d_8h_transient	IE_d_8h_transient	IE_d_8h_transient	IE_d_8h_transient	IE_d_8h_transient		25
+P2_I9_M4	171																															G						G7						J							J7										E_d	E_d	E_d	D_d	D_d	D_d	26
+P1_I11_M5	131																															G	G1		G3									J	J1		J3														E_d_4h_transient	E_d_4h_transient_24h		E_d_4h_transient_24h	E_d_4h_transient_24h		27
+P3_I6_M14	41																															G	G1		G3									J	J1		J3														E_d_4h_transient	E_d_4h_transient		E_d_4h_transient	E_d_4h_transient		28
+P2_I9_M7	85																															G	G1		G3									J	J1		J3														E_d_4h_transient_24h	E_d_4h_transient_24h	DE_u	E_d_4h_transient_24h	E_d_4h_transient_24h		29
+P2_I9_M1	343																															G		G2			G6							J		J2				J6											E_d_8h	E_d_8h_transient_24h	IE_d_8h	DE_d_8h	DE_d_8h		30
+P1_I11_M1	1549																															G		G2					G8					J		J2						J8									E_d_8h	E_d_8h	E_d_8h	DE_d_8h	DE_d_8h	D_d-24h	31
+P8_I4_M1	35																															G		G2					G8					J		J2						J8									E_d_8h	E_d_8h	E_d_8h	D_d_transient_24h	D_d_8h		32
+P3_I6_M2	83																															G		G2					G8					J		J2						J8									E_d_8h	E_d_8h	E_d_4h	DE_d	DE_d	D_d	33
+P2_I9_M12	62																															G		G2			G6							J		J2				J6											E_d_8h	E_d_8h	E_d_8h	DE_d_8h_transient_24h	DE_d_8h		34
+P9_I5_M1	44																															G		G2										J		J2															E_d_8h	E_d_8h	DE_d_8h	E_d_8h	E_d_8h		35
+P3_I6_M6	64																															G		G2		G4								J		J2		J4													E_d_8h_transient	E_d_8h_transient	E_d_8h	DE_d_8h	DE_d_8h	DE_d	36
+P3_I6_M3	69																															G		G2		G4								J		J2		J4													E_d_8h_transient	E_d_8h_transient		E_d_8h_transient	E_d_8h_transient		37
+P1_I11_M9	73																															G		G2		G4								J		J2		J4													E_d_8h_transient	E_d_8h		E_d_8h_transient	E_d_8h		38
+P2_I9_M11	67																															G		G2		G4								J		J2		J4													E_d_8h_transient	E_d_8h_transient		E_d_8h	E_d_8h		39
+P5_I3_M1	40																																																														IE_u_4h	IE_d_4h_transient_24h	IE_d_4h		40
+P8_I4_M2	37																																																															IE_d_4h_transient			41
+P3_I6_M11	54																																							H	H2												K	K1		K3					DE_d_8h	DE_d_8h	DE_d_8h	DE_d_8h_transient_24h	DE_d_8h		42
+P3_I6_M1	102																																							H													K	K1							DE_d_8h	DE_d_8h_transient_24h		DE_d_8h_transient_24h	DE_d_8h		43
+P2_I9_M2	253																																									I															L				D_d	D_d	D_d	D_d	D_d	D_d	44
+P3_I6_M12	55																																									I	I2														L		L2		D_d	D_d	D_d	D_d_8h	D_d		45
+P9_I5_M2	36																																																																		46
+P3_I6_M15	34																																																																		47

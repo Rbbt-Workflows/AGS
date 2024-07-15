@@ -1,11 +1,12 @@
+- require 'rbbt/statistics/hypergeometric'
 
 - header 'p-value', "NumericValue"
 = table :page => "1~p-value" do
-  - require 'rbbt/statistics/hypergeometric'
+
   - tsv = ExTRI.job(:pairs_final).produce.path.tsv :type => :flat,
     :key_field => "Target Gene (Associated Gene Name)",
-    :fields => "Transcription Factor (Associated Gene Name)",
+    :fields => ["Transcription Factor (Associated Gene Name)"],
     :merge => true
 
-  - tsv.enrichment(list, tsv.fields.first, :cutoff => 0.05)
+  - next tsv.enrichment(list, tsv.fields.first, :cutoff => 0.05, :fdr => false)
 

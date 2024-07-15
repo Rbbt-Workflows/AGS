@@ -1,0 +1,131 @@
+- require 'rbbt/util/R'
+
+- default_pvalue = 0.05
+- action_card = ActionCard.new do
+  - input :pvalue_threshold, :float, "Threshold for decoupler p-value", default_pvalue
+
+- pvalue_threshold = default_pvalue if pvalue_threshold.nil?
+- pvalue_threshold = pvalue_threshold.to_f
+= action_card_render action_card do
+  %h1 HEATMAPS
+  - fc0_all = nil
+  - fc_all = nil
+  - fcf_all = nil
+
+  - offsets_by_timepoint = nil
+
+  - AGS::TREATMENTS.each do |treatment|
+    - AGS::TIME_POINTS.each_with_index do |time_point,index|
+      - fc0 = AGS.job(:timepoint_decoupler, treatment: treatment, time_point: time_point, data_type: :fc0, :threshold => pvalue_threshold).run
+      - if index > 0
+        - fc0_prev = AGS.job(:timepoint_decoupler, treatment: treatment, time_point: AGS::TIME_POINTS[index - 1], data_type: :fc0, :threshold => pvalue_threshold).run
+        - fc0.fields do |field|
+          - fc0.process field do |k,v|
+            - v.to_f - fc0_prev[k][field].to_f
+
+      - fc = AGS.job(:timepoint_decoupler, treatment: treatment, time_point: time_point, data_type: :fc, :threshold => pvalue_threshold).run
+
+      - fcf = AGS.job(:timepoint_decoupler, treatment: treatment, time_point: time_point, data_type: :range, dynamic: true, :threshold => pvalue_threshold).run
+      - fcf.fields = [[treatment, "T#{time_point}"] * "-"] if fcf.fields.empty?
+      - offsets_by_timepoint = offsets_by_timepoint.nil? ? fcf : offsets_by_timepoint.attach(fcf, complete: true)
+
+      - fc_all = fc_all.nil? ? fc : fc_all.attach(fc, :complete => true)
+      - fcf_all = fcf_all.nil? ? fcf : fcf_all.attach(fcf, :complete => true)
+      - fc0_all = fc0_all.nil? ? fc0 : fc0_all.attach(fc0, :complete => true)
+
+
+  - ordered_fields = offsets_by_timepoint.fields.sort_by{|f| AGS::TREATMENTS.index(f.split("-").first) * 0.1  + f.match(/T(\d+)/)[1].to_i }
+  - offsets_by_timepoint = offsets_by_timepoint.reorder :key, ordered_fields
+  .figure
+    .title
+      Offsets by timepoint
+
+    .content
+      = resource "Offsets by timepoint", "Offsets by timepoint", :image do |filename|
+        :ruby
+          offsets_by_timepoint.R <<-EOF
+            data[is.na(data)] = 0
+            rbbt.require('gplots');
+            colors = hcl.colors(256, 'Blue-Red')
+            rbbt.heatmap('#{filename}', data, height='auto', margins = c(10,12), dendrogram='row', Colv=FALSE, trace='none', col = colors, density.info="none", keysize = 0.75)
+          EOF
+  - require 'rbbt/rest/common/tabs'
+  = tabs do |tab|
+    - tab.active "INT_PD_PI"
+    - @step.progress_bar("Processing treatments", max: AGS::TREATMENTS.length) do |bar|
+      - AGS::TREATMENTS.each do |treatment|
+        - tab.add treatment do
+          - filename = "heatmap-#{treatment}.png"
+          - text = "Heatmap for #{treatment}"
+          - tpfc = fc_all.slice(fc_all.fields.select{|f| f.split("-").include?(treatment) })
+          - tpfcf = fcf_all.slice(fcf_all.fields.select{|f| f.split("-").include?(treatment) })
+          - tpfc0 = fc0_all.slice(fc0_all.fields.select{|f| f.split("-").include?(treatment) })
+
+          - tpfc = tpfc.select{|k,l| l.select{|v| v.to_f != 0.0 }.any? }
+          - tpfcf = tpfcf.select{|k,l| l.select{|v| v.to_f != 0.0 }.any? }
+          - tpfc0 = tpfc0.select{|k,l| l.select{|v| v.to_f != 0.0 }.any? }
+
+          - tpfc.fields = tpfc.fields.collect{|f| f + ' prev all' } - tpfcf.fields = tpfcf.fields.collect{|f| f + ' prev clust' }
+          - tpfc0.fields = tpfc0.fields.collect{|f| f + ' diff' }
+
+          - data = tpfcf.attach tpfc, complete: true
+          - data = data.attach tpfc0, complete: true
+
+
+          - gene_pos_offsets = {}
+          - gene_neg_offsets = {}
+          - data.through do |gene,values|
+            - prev = 0
+            - values.each_with_index do |v,i|
+              - if ! v.nil?
+                - if v > 0 && prev <= 0
+                  - gene_pos_offsets[gene] ||= []
+                  - gene_pos_offsets[gene] << i
+                - if v < 0 && prev >= 0
+                  - gene_neg_offsets[gene] ||= []
+                  - gene_neg_offsets[gene] << i
+              - prev = (i + 1) % 5 == 0 ? 0 : v.to_f
+
+          - {:positive => gene_pos_offsets,
+            :negative => gene_neg_offsets}.each do |name,info|
+
+            - tsv = TSV.setup({}, :key_field => "Method", :fields => AGS::TIME_POINTS.collect{|t| "T#{t}" }, :type => :double)
+            - info.each do |gene, offsets|
+              - conditions = data.fields.values_at *offsets
+              - conditions.each do |condition|
+                - treatment, time, method = condition.match(/(.*)-T(.*?) (.*)/).captures
+                - values = tsv[method] ||= [[], [], [], [], []]
+                - values[AGS::TIME_POINTS.index(time.to_i)] << gene
+                - tsv[method] = values
+
+            - tsv["only prev clust"] = AGS::TIME_POINTS.collect{|t| t = "T#{t}"; tsv["prev clust"][t] - tsv["prev all"][t] - tsv["diff"][t] }
+            - tsv["only prev all"] = AGS::TIME_POINTS.collect{|t| t = "T#{t}"; tsv["prev all"][t] - tsv["prev clust"][t] - tsv["diff"][t] }
+            - tsv["only diff"] = AGS::TIME_POINTS.collect{|t| t = "T#{t}"; tsv["diff"][t] - tsv["prev all"][t] - tsv["prev clust"][t] }
+            - tsv["diff & prev all"] = AGS::TIME_POINTS.collect{|t| t = "T#{t}"; tsv["diff"][t] & tsv["prev all"][t] }
+            - tsv["in any methods"] = AGS::TIME_POINTS.collect{|t| t = "T#{t}"; (tsv["diff"][t] + tsv["prev all"][t] + tsv["prev clust"][t]).uniq  }
+            - tsv["in all methods"] = AGS::TIME_POINTS.collect{|t| t = "T#{t}"; tsv["diff"][t] & tsv["prev all"][t] & tsv["prev clust"][t]  }
+              
+            - AGS::TIME_POINTS.collect{|t| "T#{t}" }.each do |field|
+              - header field, "Associated Gene Name"
+            = table :list_links => true, :table_id => "#{name} offset TFs for #{treatment} pvalue #{pvalue_threshold}" do
+              - next tsv
+
+          .figure
+            .title
+              = text
+              - if data.size > 2
+                = resource filename.sub('png','xlsx'), 'Excel', :link do |filename|
+                  - data.xlsx filename
+
+            .content
+              - if data.size > 2
+                = resource filename, text, :image do |filename|
+                  :ruby
+                    data.R <<-EOF
+                      data[is.na(data)] = 0
+                      rbbt.require('gplots');
+                      colors = hcl.colors(256, 'Blue-Red')
+                      rbbt.heatmap('#{filename}', data, height='auto', margins = c(10,12), dendrogram='row', Colv=FALSE, trace='none', col = colors, density.info="none", keysize = 0.75)
+                    EOF
+              
+          - bar.tick

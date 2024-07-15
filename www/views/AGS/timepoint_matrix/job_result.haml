@@ -1,0 +1,7 @@
+.job_control
+  = workflow_partial('job_result/job_control', workflow, task, locals)
+
+- tsv = result
+- tsv = tsv.transpose("Associated Gene Name")
+= table do
+  - next tsv

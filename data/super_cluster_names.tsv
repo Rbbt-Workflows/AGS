@@ -1,0 +1,60 @@
+#: :filename=/home/mvazque2/.rbbt/tmp/tmp-75338325.List cluster-groups#:type=:double
+#Cluster-group	Cluster-group-description
+A	all IE_up
+A1	IE_up_peak 4h
+A2	IE_up_peak 8h
+A3	IE_up_peak 4h_transient
+A4	IE_up_peak 8h_transient
+A5	IE_up_peak 4h_comb-specific
+A7	IE_up_peak 4h_comb-PI-specific
+A8	IE_up_peak 8h_comb_PI-specific
+B	all E_up
+B1	E_up_or_downp_peak 4h
+B2	E_up_peak 8h
+B3	E_up_peak 4h_transient
+B4	E_up_peak 8h_transient
+B5	E_up_peak 4h_comb-specific
+B7	E_up_peak 4h_comb-PI-specific
+B8	E_up_or_downp_peak 8h_comb_PI-specific
+C	all IE_OR_E_up_or_downp
+C1	IE_OR_E_up_peak 4h
+C2	IE_OR_E_up_peak 8h
+C3	IE_OR_E_up_peak 4h_transient
+C4	IE_OR_E_up_peak 8h_transient
+C5	IE_OR_E_up_peak 4h_comb-specific
+C7	IE_OR_E_up_peak 4h_comb-PI-specific
+C8	IE_OR_E_up_peak 8h_comb_PI-specific
+E	all_DE_up
+E1	DE_up_peak_8h
+E2	DE_up_peak_8h_comb-specific
+E3	DE_up_peak_8h_comb_PI-specific
+F	all D_up
+F1	D_up peak 8h
+G	all IE or E_down
+G1	IE or E_down_peak 4h
+G2	IE or E_down_peak 8h
+G3	IE or E_down_peak 4h_transient
+G4	IE or E_down_peak 8h_transient
+G6	IE or E_down_peak 8h_comb-specific
+G7	IE or E_down_peak 4h_comb-PI-specific
+G8	IE or E_down_peak 8h_comb_PI-specific
+H	DE_down peak 8h
+H2	DE_down peak 8h__comb_PI-specific
+I	D_down
+I2	D_down_comb_specific
+J	all IE or E_UP_OR_DOWN
+J1	IE or E_up_or_down_peak 4h
+J2	IE or E_up_or_down_peak 8h
+J3	IE or E_up_or_down_peak 4h_transient
+J4	IE or E_up_or_down_peak 8h_transient
+J5	IE or E_up_or_down_peak 4h_comb-specific
+J6	IE or E_up_or_down_peak 8h_comb-specific
+J7	IE or E_up_or_down_peak 4h_comb-PI-specific
+J8	IE or E_up_or_down_peak 8h_comb_PI-specific
+K	all_DE__UP_OR_DOWN
+K1	DE_up_or_down_peak_8h
+K2	DE_up_or_down_peak_8h_comb-specific
+K3	DE_up_or_down_peak_8h_comb_PI-specific
+L	all D__UP_OR_DOWN
+L1	D_up_or_down peak 8h
+L2	D_up_or_down _comb_specific
