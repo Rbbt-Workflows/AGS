@@ -1,11 +1,15 @@
 - require 'rbbt/util/R'
 
 - default_pvalue = 0.05
+- default_finegrained_degradation = true
 - action_card = ActionCard.new do
   - input :pvalue_threshold, :float, "Threshold for decoupler p-value", default_pvalue
+  - input :finegrained_degradation, :boolean, "Degradation filter", default_finegrained_degradation
 
 - pvalue_threshold = default_pvalue if pvalue_threshold.nil?
 - pvalue_threshold = pvalue_threshold.to_f
+- finegrained_degradation = default_finegrained_degradation if default_finegrained_degradation.nil?
+- finegrained_degradation = finegrained_degradation.to_s != 'false'
 = action_card_render action_card do
   %h1 HEATMAPS
   - fc0_all = nil
@@ -15,17 +19,18 @@
   - offsets_by_timepoint = nil
 
   - AGS::TREATMENTS.each do |treatment|
+    - next unless treatment.include?("PD_PI")
     - AGS::TIME_POINTS.each_with_index do |time_point,index|
-      - fc0 = AGS.job(:timepoint_decoupler, treatment: treatment, time_point: time_point, data_type: :fc0, :threshold => pvalue_threshold).run
+      - fc0 = AGS.job(:timepoint_decoupler, treatment: treatment, time_point: time_point, data_type: :fc0, :threshold => pvalue_threshold, :finegrained_degradation => finegrained_degradation).run
       - if index > 0
-        - fc0_prev = AGS.job(:timepoint_decoupler, treatment: treatment, time_point: AGS::TIME_POINTS[index - 1], data_type: :fc0, :threshold => pvalue_threshold).run
+        - fc0_prev = AGS.job(:timepoint_decoupler, treatment: treatment, time_point: AGS::TIME_POINTS[index - 1], data_type: :fc0, :threshold => pvalue_threshold, :finegrained_degradation => finegrained_degradation).run
         - fc0.fields do |field|
           - fc0.process field do |k,v|
             - v.to_f - fc0_prev[k][field].to_f
 
-      - fc = AGS.job(:timepoint_decoupler, treatment: treatment, time_point: time_point, data_type: :fc, :threshold => pvalue_threshold).run
+      - fc = AGS.job(:timepoint_decoupler, treatment: treatment, time_point: time_point, data_type: :fc, :threshold => pvalue_threshold, :finegrained_degradation => finegrained_degradation).run
 
-      - fcf = AGS.job(:timepoint_decoupler, treatment: treatment, time_point: time_point, data_type: :range, dynamic: true, :threshold => pvalue_threshold).run
+      - fcf = AGS.job(:timepoint_decoupler, treatment: treatment, time_point: time_point, data_type: :range, dynamic: true, :threshold => pvalue_threshold, :finegrained_degradation => finegrained_degradation).run
       - fcf.fields = [[treatment, "T#{time_point}"] * "-"] if fcf.fields.empty?
       - offsets_by_timepoint = offsets_by_timepoint.nil? ? fcf : offsets_by_timepoint.attach(fcf, complete: true)
 
@@ -54,6 +59,7 @@
     - tab.active "INT_PD_PI"
     - @step.progress_bar("Processing treatments", max: AGS::TREATMENTS.length) do |bar|
       - AGS::TREATMENTS.each do |treatment|
+        - next unless treatment.include?("PD_PI")
         - tab.add treatment do
           - filename = "heatmap-#{treatment}.png"
           - text = "Heatmap for #{treatment}"
@@ -107,7 +113,7 @@
               
             - AGS::TIME_POINTS.collect{|t| "T#{t}" }.each do |field|
               - header field, "Associated Gene Name"
-            = table :list_links => true, :table_id => "#{name} offset TFs for #{treatment} pvalue #{pvalue_threshold}" do
+            = table :list_links => true, :table_id => "#{name} offset TFs for #{treatment} pvalue #{pvalue_threshold} finegrained_degradation #{finegrained_degradation}" do
               - next tsv
 
           .figure
