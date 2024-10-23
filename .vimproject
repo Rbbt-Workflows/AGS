@@ -34,6 +34,7 @@ AGS=/$PWD filter="*.rb *.rake Rakefile *.rdoc *.R *.sh *.js *.haml *.sass *.txt 
   test_helper.rb
  }
  data=data filter="*"{
+  dbTFs_expressed_in_AGS.list
   AGS_dbTFs.list
   cluster_groups.tsv
   gene_modules.tsv
@@ -62,9 +63,9 @@ AGS=/$PWD filter="*.rb *.rake Rakefile *.rdoc *.R *.sh *.js *.haml *.sass *.txt 
     }
    }
    main=main{
-    clusters.haml
-    heatmaps.haml
     profiles.haml
+    heatmaps.haml
+    test.haml
    }
    entity_list=entity_list{
     Gene.haml
@@ -83,6 +84,7 @@ AGS=/$PWD filter="*.rb *.rake Rakefile *.rdoc *.R *.sh *.js *.haml *.sass *.txt 
     Gene.haml
     Gene=Gene{
      expression_profiles.haml
+     change_offsets.haml
      target_gene_heatmap.haml
     }
     Treatment.haml

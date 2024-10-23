@@ -6,6 +6,24 @@ module AGS
     [treatment, time_point, data_type, synthesis_criteria, "synth=#{synthesis}", "dynamic=#{dynamic}", "finegrained_degradation=#{finegrained_degradation}"] * "-"
   end
 
+  def self.range_value(fc_values, cluster, time_point)
+    range = cluster.split(" ").last
+    range_start, range_end = range.split("-")
+    range_start = range_start.to_i
+    range_end = range_end.nil? ? range_start : range_end.to_i
+    return nil unless time_point == range_start
+    i_start = TIME_POINTS.index(range_start)
+    i_end = TIME_POINTS.index(range_end)
+
+    fc = fc_values[i_start].to_f
+    fc -= fc_values[i_start-1].to_f unless i_start == 0
+
+    (i_start+1..i_end).each do |ext_i|
+      fc += (fc_values[ext_i].to_f - fc_values[ext_i-1].to_f) / (TIME_POINTS[ext_i] - TIME_POINTS[ext_i-1])
+    end
+    return fc
+  end
+
   dep :vetted_genes
   input :treatment, :select, "Treatment", nil, :select_options => TREATMENTS, :required => true
   input :time_point, :select, "Timepoint", nil, :select_options => TIME_POINTS, :required => true
@@ -19,21 +37,23 @@ module AGS
     TSV.traverse step(:vetted_genes), :into => matrix do |name,values,fields|
       name = name.first if Array === name
       NamedArray.setup(values, fields)
-      fc_values = values.values_at(*fc_fields).collect{|v| v.first.to_f}
+      fc_values = values.values_at(*fc_fields).collect{|v| v.first}
       clusters = values[treatment + ": FC clusters"]
 
       time_point_index =  TIME_POINTS.index time_point
 
+      next if fc_values[time_point_index].nil?
+
       value = case data_type.to_sym
               when :fc0
-                fc = fc_values[time_point_index]
+                fc = fc_values[time_point_index].to_f
               when :fc
-                fc = fc_values[time_point_index]
-                fc -= fc_values[time_point_index-1] unless time_point_index == 0
+                fc = fc_values[time_point_index].to_f
+                fc -= fc_values[time_point_index-1].to_f unless time_point_index == 0
                 fc
               when :ext_fc
-                fc = (time_point_index == fc_values.length - 1) ? fc_values[time_point_index] : fc_values[time_point_index+1]
-                fc -= fc_values[time_point_index-1] unless time_point_index == 0
+                fc = (time_point_index == fc_values.length - 1) ? fc_values[time_point_index].to_f : fc_values[time_point_index+1].to_f
+                fc -= fc_values[time_point_index-1].to_f unless time_point_index == 0
                 fc
               when :binary
                 if increase
@@ -46,20 +66,22 @@ module AGS
               when :range
                 fc = nil
                 clusters.each{|cluster| 
-                  range = cluster.split(" ").last
-                  range_start, range_end = range.split("-")
-                  range_start = range_start.to_i
-                  range_end = range_end.nil? ? range_start : range_end.to_i
-                  next unless time_point == range_start
-                  i_start = TIME_POINTS.index(range_start)
-                  i_end = TIME_POINTS.index(range_end)
+                  fc = AGS.range_value(fc_values, cluster, time_point)
+                  break if ! fc.nil?
+                  #range = cluster.split(" ").last
+                  #range_start, range_end = range.split("-")
+                  #range_start = range_start.to_i
+                  #range_end = range_end.nil? ? range_start : range_end.to_i
+                  #next unless time_point == range_start
+                  #i_start = TIME_POINTS.index(range_start)
+                  #i_end = TIME_POINTS.index(range_end)
 
-                  fc = fc_values[i_start]
-                  fc -= fc_values[i_start-1] unless i_start == 0
+                  #fc = fc_values[i_start].to_f
+                  #fc -= fc_values[i_start-1].to_f unless i_start == 0
 
-                  (i_start+1..i_end).each do |ext_i|
-                    fc += (fc_values[ext_i] - fc_values[ext_i-1]) / (TIME_POINTS[ext_i] - TIME_POINTS[ext_i-1])
-                  end
+                  #(i_start+1..i_end).each do |ext_i|
+                  #  fc += (fc_values[ext_i].to_f - fc_values[ext_i-1].to_f) / (TIME_POINTS[ext_i] - TIME_POINTS[ext_i-1])
+                  #end
                 }
                 fc.nil? ? 0 : fc
               else
@@ -254,5 +276,5 @@ rbbt.plot.venn(data)
     nil
   end
 
-  
+
 end

@@ -24,32 +24,37 @@
     - AGS::TREATMENTS.each do |treatment|
       - next if treatment == "DMSO"
       - tab.add treatment do
-        - data = nil
+        - fc_data = nil
+        - range_data = nil
         - AGS::TIME_POINTS.each do |time_point|
-          - matrix_full    = AGS.job(:timepoint_matrix, treatment: treatment, time_point: time_point, data_type: :fc).run.transpose
-          - matrix_dynamic = AGS.job(:timepoint_matrix, treatment: treatment, time_point: time_point, data_type: :range, dynamic: true).run.transpose
+          - matrix_full = AGS.job(:timepoint_matrix, treatment: treatment, time_point: time_point, data_type: :fc).run.transpose
           - matrix_full = matrix_full.subset(targets)
-          - dynamic = matrix_dynamic.keys & targets
-          - data = data.nil? ? matrix_full : data.attach(matrix_full, complete: true)
+          - fc_data = fc_data.nil? ? matrix_full : fc_data.attach(matrix_full, complete: true)
 
+          - matrix_full_range = AGS.job(:timepoint_matrix, treatment: treatment, time_point: time_point, data_type: :range).run.transpose
+          - matrix_full_range = matrix_full_range.subset(targets)
+          - range_data = range_data.nil? ? matrix_full_range : range_data.attach(matrix_full_range, complete: true)
+
+        - range_data.fields = range_data.fields.collect{|f| "Range #{f}" }
+        - fc_data.attach range_data
         - text = "Targets of #{entity.name} in #{treatment}"
         - filename = text + ".png"
 
         - require 'rbbt/util/R'
 
-        - data.fields.each do |field|
-          - data.process field do |v,k|
+        - fc_data.fields.each do |field|
+          - fc_data.process field do |v,k|
             - weight = regulome_weight[[entity.name, k] * ":"]
             - v.to_f * weight.to_f
 
-        - data.add_field "Annotated gene" do |k,v|
+        - fc_data.add_field "Annotated gene" do |k,v|
           - weight = regulome_weight[[entity.name, k] * ":"]
           - if weight.to_f < 0
             - "- " + k
           - else
             - "+ " + k
 
-        - data = data.reorder "Annotated gene", data.fields[0..-2]
+        - fc_data = fc_data.reorder "Annotated gene", fc_data.fields[0..-2]
 
         - list_container = ListContainer.new
         - AGS::TIME_POINTS.each do |time_point|
@@ -65,13 +70,13 @@
           .title
             = text
             = resource filename.sub('png','xlsx'), 'Excel', :link do |filename|
-              - data.xlsx filename
+              - fc_data.xlsx filename
 
           .content
-            - if data.size > 2
+            - if fc_data.size > 2
               = resource filename, text, :image do |filename|
                 :ruby
-                  data.R <<-EOF
+                  fc_data.R <<-EOF
                     rbbt.require('gplots');
                     colors = hcl.colors(256, 'Blue-Red')
                     rbbt.heatmap('#{filename}', data, take_log=T, height='auto', margins = c(10,12), dendrogram='row', Colv=FALSE, trace='none', col = colors, density.info="none", keysize = 0.75)

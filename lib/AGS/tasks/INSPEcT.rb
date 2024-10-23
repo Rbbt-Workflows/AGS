@@ -393,5 +393,3 @@ module AGS
   end
 
 end
-
-require_relative 'INSPEcT/synthesis'

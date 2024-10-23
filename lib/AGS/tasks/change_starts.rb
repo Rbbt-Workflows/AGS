@@ -36,7 +36,7 @@ module AGS
     end
     segments << [current.first, current.last] if current.any?
 
-    segments.collect{|s,e| [s,e].uniq.collect{|i| AGS::TIME_POINTS[i] } * "-" }
+    segments.collect{|s,e| ([s,e].uniq.collect{|i| AGS::TIME_POINTS[i] } * "-") + "h" }
   end
 
   def self.clean_offsets(offsets)
@@ -166,14 +166,19 @@ module AGS
     low_min_24h, mid_min_24h, high_min_24h, next_min_24h, low_multiplier_24h, mid_multiplier_24h|
 
     if protein_coding
+      log :gene_info, "Identifiers"
       gene_info = Organism.identifiers(AGS.organism).tsv(:key_field => "Associated Gene Name", :fields => ["Ensembl Gene ID"], :type => :double)
+      log :gene_info, "Transcripts"
       gene_info = gene_info.attach Organism.transcripts(AGS.organism), :fields => ["Ensembl Transcript ID"]
+      log :gene_info, "Biotype"
       gene_info = gene_info.attach Organism.transcript_biotype(AGS.organism), :fields => ["Ensembl Transcript Biotype"], one2one: true
 
       protein_coding_genes = Set.new(gene_info.select("Ensembl Transcript Biotype" => 'protein_coding').keys)
     end
 
+    log :transpose, "Foldchanges"
     fc_tsv = step(:fold_changes).load.transpose "Associated Gene Name"
+    log :transpose, "P-values"
     pvalue_tsv = step(:pvalues).load.transpose "Associated Gene Name"
     experiments = fc_tsv.fields.collect{|f| f.split(".").first.sub("FC_", "") }.uniq 
 

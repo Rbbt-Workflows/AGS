@@ -1,0 +1,62 @@
+- action_card = ActionCard.new do
+  - input :log_time, :boolean, "Take the log of time", true
+
+= action_card_render action_card do
+
+  - ensembl = entity.to "Ensembl Gene ID"
+  - name = entity.to :name
+
+  - clusters = AGS.job(:change_offsets).run
+  - %w(PI PD 5Z 5Z_PI PD_PI ).each do |experiment|
+    = fragment do
+      .ui.segment.clearfix
+        - cluster_field = clusters.fields.select{|f| f == experiment.sub("5Z", "FiveZ") || f == "INT_#{experiment.sub("5Z", "FiveZ")}"}.first
+        %h3= experiment + " - #{clusters[name][cluster_field] || "No pattern"}"
+        - log_time = true unless log_time
+        - fc_tsv = AGS.fold_changes
+        - gc_tsv = AGS.gene_counts
+
+        - fields = fc_tsv.fields.select{|f| f.include?("FC_#{experiment.sub("5Z", "FiveZ")}.T") || f.include?("FC_INT_#{experiment.sub("5Z", "FiveZ")}.T") }.sort_by{|f| f.split(".T").last.to_i}
+        - fc = fc_tsv[name].values_at *fields
+
+        - fields = gc_tsv.fields.select{|f| f =~ /^#{experiment}-T/ }.sort_by{|f| f.split("-T").last.to_i}
+        - gc = gc_tsv[ensembl].values_at *fields
+        - time = [1,2,4,8,24]
+
+        - time_gene_counts = TSV.setup({},"ID~Time,GeneCount#:type=:list#:cast=:to_f")
+        - id = 0
+        - untreated = gc_tsv[ensembl]["untreated-T0"]
+        - untreated.each do |v|
+          - time_gene_counts[id] = [0, v]
+          - id += 1
+
+        - time.zip(gc).each do |t,list|
+          - list.each do |v|
+            - time_gene_counts[id] = [t,v]
+            - id += 1
+
+        - Log.tsv time_gene_counts
+      
+        .figure.float
+          .title
+            Gene counts in #{experiment}
+          = tool :Rggplot, :plot => "ggplot(data, aes(x=Time, y=GeneCount)) + geom_point() + xlim(-1,25) + theme_classic() + theme(text = element_text(size = 5)) #{log_time ? " + scale_x_continuous(trans='log2')" : ""} ", :data => time_gene_counts, :size => 2
+
+        - time_fcs = TSV.setup({},"ID~Time,FC#:type=:list#:cast=:to_f")
+        - id = 0
+        - time.zip(fc).each do |t,v|
+          - time_fcs[id] = [t,v]
+          - id += 1
+
+        - Log.tsv time_fcs
+      
+        .figure.float
+          .title
+            Fold changes in #{experiment}
+          - max_y = time_fcs.column("FC").values.max
+          - min_y = time_fcs.column("FC").values.min
+          - max_y = 1.1 if max_y < 1.1
+          - min_y = -1.1 if min_y > -1.1
+          = tool :Rggplot, :plot => "ggplot(data, aes(x=Time, y=FC)) + geom_line() + ylim(#{min_y},#{max_y})  + xlim(-1,25) + theme_classic() + theme(text = element_text(size = 5)) #{log_time ? " + scale_x_continuous(trans='log2')" : "" } + geom_hline(yintercept=1, linetype='dashed', color = 'red') + geom_hline(yintercept=-1, linetype='dashed', color = 'red') " , :data => time_fcs, :size => 2
+
+

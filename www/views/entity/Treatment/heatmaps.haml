@@ -1,0 +1,6 @@
+- action_card = ActionCard.new do
+  - input :order, :select, "Order by", '1', :select_options => AGS::TIME_POINTS
+-# action_card.require :NAME
+= action_card_render action_card do
+  - AGS::TIME_POINTS.each do |timepoint|
+    - break

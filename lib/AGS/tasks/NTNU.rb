@@ -51,4 +51,9 @@ module AGS
 
     tsv.transpose
   end
+
+  dep :pvalues_NTNU
+  task :pvalues_NTNU_transposed => :tsv do
+    step(:pvalues_NTNU).load.transpose "Associated Gene Name"
+  end
 end
