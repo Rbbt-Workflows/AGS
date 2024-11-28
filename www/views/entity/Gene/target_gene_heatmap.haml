@@ -1,89 +1,145 @@
-%h1 Target-gene expression for #{entity.name}
+- default_pvalue = 0.05
+- default_vetting = :degradation
+- default_offsets = true
+- default_synthesis = false
+- default_use_ExTRI2_regulome = false
+- default_method = :ulm
+- action_card = ActionCard.new do
+  - input :pvalue_threshold, :float, "Threshold for decoupler p-value", default_pvalue
+  - input :vetting, :select, "Vetting scheme", default_vetting, select_options: %w(none synthesis degradation relaxed_degradation) 
+  - input :use_ExTRI2_regulome, :boolean, "Use ExTRI2 regulomer", default_use_ExTRI2_regulome
+  - input :method, :select, "Decoupler method to use", default_method, select_options: %w(ulm mlm combined)
 
-%p
-  Expression values are already converted to the right direction using the mode of regulations, so negative regulation targets
-  have their fc multiplied by -1.
+- pvalue_threshold = default_pvalue if pvalue_threshold.nil?
+- pvalue_threshold = pvalue_threshold.to_f
+- vetting = default_vetting if vetting.nil?
+- use_ExTRI2_regulome = default_use_ExTRI2_regulome if use_ExTRI2_regulome.nil?
+- use_ExTRI2_regulome = use_ExTRI2_regulome.to_s != 'false'
+- method = nil if method.to_s == 'ulm'
+- cpus = method.nil? ? 1 : 4
+- page_options = {vetting: vetting, threshold: pvalue_threshold, ExTRI2_regulome: use_ExTRI2_regulome, method: method}
 
+= action_card_render action_card do
 
-- regulome = SaezLab.job(:regulome).produce.path.tsv :key_field => 'source', :type => :double, :merge => true
-- regulome_targets = regulome.column('target').to_flat
-- regulome_weight = regulome.unzip('target').column('weight').to_single
-- targets = regulome_targets[entity.name]
-
-- gc = AGS.job(:change_offsets).run
-
-- gc = gc.subset(targets)
-
-- if targets.nil? || targets.empty?
-  No targets
-- else
-  
   - require 'rbbt/rest/common/tabs'
   = tabs do |tab|
     - tab.active "INT_PD_PI"
-    - AGS::TREATMENTS.each do |treatment|
-      - next if treatment == "DMSO"
-      - tab.add treatment do
-        - fc_data = nil
-        - range_data = nil
-        - AGS::TIME_POINTS.each do |time_point|
-          - matrix_full = AGS.job(:timepoint_matrix, treatment: treatment, time_point: time_point, data_type: :fc).run.transpose
-          - matrix_full = matrix_full.subset(targets)
-          - fc_data = fc_data.nil? ? matrix_full : fc_data.attach(matrix_full, complete: true)
+    - @step.progress_bar("Processing treatments", max: AGS::TREATMENTS.length) do |bar|
+      - AGS::TREATMENTS.each do |treatment|
+        - next if treatment == "DMSO"
+        - tab.add treatment do
+          - tsv = AGS.job(:treatment_tfs_priority_consistency, page_options).run
+          - tsv.cast = :to_f
+          = table do
+            - next tsv
 
-          - matrix_full_range = AGS.job(:timepoint_matrix, treatment: treatment, time_point: time_point, data_type: :range).run.transpose
-          - matrix_full_range = matrix_full_range.subset(targets)
-          - range_data = range_data.nil? ? matrix_full_range : range_data.attach(matrix_full_range, complete: true)
+= action_card_render action_card do
 
-        - range_data.fields = range_data.fields.collect{|f| "Range #{f}" }
-        - fc_data.attach range_data
-        - text = "Targets of #{entity.name} in #{treatment}"
-        - filename = text + ".png"
+  %h1 Target-gene expression for #{entity.name}
 
-        - require 'rbbt/util/R'
+  %p
+    Expression values are already converted to the right direction using the mode of regulations, so negative regulation targets
+    have their fc multiplied by -1.
 
-        - fc_data.fields.each do |field|
-          - fc_data.process field do |v,k|
+  - if use_ExTRI2_regulome
+    - Workflow.require_workflow "ExTRI2"
+    - regulome = ExTRI2.job(:regulome).produce.path.tsv :key_field => 'source', :type => :double, :merge => true
+  - else
+    - regulome = SaezLab.job(:regulome).produce.path.tsv :key_field => 'source', :type => :double, :merge => true
+
+  - regulome_targets = regulome.column('target').to_flat
+  - regulome_weight = regulome.unzip('target').column('weight').to_single
+  - targets = regulome_targets[entity.name] || []
+
+  - gc = AGS.job(:change_offsets).run
+
+  - gc = gc.subset(targets)
+
+  - if targets.nil? || targets.empty?
+    No targets
+  - else
+    
+    - require 'rbbt/rest/common/tabs'
+    = tabs do |tab|
+      - tab.active "INT_PD_PI"
+      - AGS::TREATMENTS.each do |treatment|
+        - next if treatment == "DMSO"
+        - tab.add treatment do
+          - fc_data = nil
+          - fc0_data = nil
+          - range_data = nil
+          - AGS::TIME_POINTS.each do |time_point|
+            - matrix_full = AGS.job(:timepoint_matrix, treatment: treatment, time_point: time_point, data_type: :fc).run.transpose
+            - matrix_full = matrix_full.subset(targets)
+            - fc_data = fc_data.nil? ? matrix_full : fc_data.attach(matrix_full, complete: true)
+
+            - matrix_full_0 = AGS.job(:timepoint_matrix, treatment: treatment, time_point: time_point, data_type: :fc0).run.transpose
+            - matrix_full_0 = matrix_full_0.subset(targets)
+            - fc0_data = fc0_data.nil? ? matrix_full_0 : fc0_data.attach(matrix_full_0, complete: true)
+
+
+            - matrix_full_range = AGS.job(:timepoint_matrix, treatment: treatment, time_point: time_point, data_type: :range).run.transpose
+            - matrix_full_range = matrix_full_range.subset(targets)
+            - range_data = range_data.nil? ? matrix_full_range : range_data.attach(matrix_full_range, complete: true)
+
+          - range_data.fields = range_data.fields.collect{|f| "Range #{f}" }
+          - fc0_data.fields = fc0_data.fields.collect{|f| "FC0 #{f}" }
+          - fc_data.attach fc0_data
+          - fc_data.attach range_data
+          - text = "Targets of #{entity.name} in #{treatment}"
+          - filename = text + ".png"
+
+          - require 'rbbt/util/R'
+
+          -# fc_data.fields.each do |field|
+            - fc_data.process field do |v,k|
+              - weight = regulome_weight[[entity.name, k] * ":"]
+              - v.to_f * weight.to_f
+
+          - fc_data.add_field "Annotated gene" do |k,v|
             - weight = regulome_weight[[entity.name, k] * ":"]
-            - v.to_f * weight.to_f
-
-        - fc_data.add_field "Annotated gene" do |k,v|
-          - weight = regulome_weight[[entity.name, k] * ":"]
-          - if weight.to_f < 0
-            - "- " + k
-          - else
-            - "+ " + k
-
-        - fc_data = fc_data.reorder "Annotated gene", fc_data.fields[0..-2]
-
-        - list_container = ListContainer.new
-        - AGS::TIME_POINTS.each do |time_point|
-          - cluster_targets = gc.select(treatment => ["increase #{time_point}", "decrease #{time_point}", /increase #{time_point}-/, /decrease #{time_point}-/]).keys
-          - cluster_targets += gc.select(treatment => /increase #{time_point}-/).keys
-          - cluster_targets += gc.select(treatment => /increase #{time_point}-/).keys
-          - cluster_targets = Entity.prepare_entity(cluster_targets, "Associated Gene Name")
-          - list_container.add "#{treatment} cluster targets for #{entity.name} at #{time_point}h", cluster_targets
-        .list_container
-          = list_container_render(list_container)
-
-        .figure
-          .title
-            = text
-            = resource filename.sub('png','xlsx'), 'Excel', :link do |filename|
-              - fc_data.xlsx filename
-
-          .content
-            - if fc_data.size > 2
-              = resource filename, text, :image do |filename|
-                :ruby
-                  fc_data.R <<-EOF
-                    rbbt.require('gplots');
-                    colors = hcl.colors(256, 'Blue-Red')
-                    rbbt.heatmap('#{filename}', data, take_log=T, height='auto', margins = c(10,12), dendrogram='row', Colv=FALSE, trace='none', col = colors, density.info="none", keysize = 0.75)
-                  EOF
+            - if weight.to_f < 0
+              - "- " + k
             - else
-              No targets
-  
-  = table do
-    - next gc
+              - "+ " + k
+
+          - fc_data = fc_data.reorder "Annotated gene", fc_data.fields[0..-2]
+
+          - list_container = ListContainer.new
+          - AGS::TIME_POINTS.each do |time_point|
+            - cluster_targets = gc.select(treatment => ["increase #{time_point}h", "decrease #{time_point}h", /increase #{time_point}-/, /decrease #{time_point}-/]).keys
+            - cluster_targets += gc.select(treatment => /increase #{time_point}-/).keys
+            - cluster_targets += gc.select(treatment => /decrease #{time_point}-/).keys
+            - cluster_targets = Entity.prepare_entity(cluster_targets.uniq, "Associated Gene Name")
+            - list_container.add "#{treatment} cluster targets for #{entity.name} at #{time_point}h (#{use_ExTRI2_regulome ? "ExTRI2" : "ExTRI"})", cluster_targets
+          .list_container
+            = list_container_render(list_container)
+
+          .figure
+            .title
+              = text
+              = resource filename.sub('png','xlsx'), 'Excel', :link do |filename|
+                - identifiers = TSV.setup({}, key_field: fc_data.key_field, fields: [gc.key_field])
+                - fc_data.keys.each do |gene| identifiers[gene] = gene.sub(/^. /,'') end
+                - fc_data.identifiers = identifiers
+                - tsv = fc_data.annotate(fc_data.dup).to_double.attach gc, fields: [treatment], insitu: false, identifiers: identifiers
+                - fields = tsv.fields
+                - fields[-1] = "Change offsets"
+                - tsv.fields = fields
+                - tsv.xlsx filename
+
+            .content
+              - if fc_data.size > 2
+                = resource filename, text, :image do |filename|
+                  :ruby
+                    fc_data.R <<-EOF
+                      rbbt.require('gplots');
+                      colors = hcl.colors(256, 'Blue-Red')
+                      rbbt.heatmap('#{filename}', data, take_log=T, height='auto', margins = c(10,12), dendrogram='row', Colv=FALSE, trace='none', col = colors, density.info="none", keysize = 0.75)
+                    EOF
+              - else
+                No targets
+    
+    = table do
+      - next gc
 

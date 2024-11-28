@@ -16,6 +16,14 @@ module AGS
   TREATMENTS = %w(INT_PD_PI INT_FiveZ_PI PI FiveZ PD DMSO)
   TIME_POINTS = [1,2,4,8,24]
   
+  def self.gprofiler
+    @gprofiler ||= begin
+                     RbbtPython.pyimport 'gprofiler'
+                     RbbtPython.gprofiler.GProfiler.new(return_dataframe: true)
+                   end
+  end
+
+  #self.gprofiler
 
   def self.organism
     "Hsa/feb2014"
@@ -270,6 +278,10 @@ require 'AGS/tasks/offset'
 require 'AGS/tasks/timepoint_heatmaps'
 require 'AGS/tasks/downstream_targets'
 require 'AGS/tasks/consistency'
+
+require 'AGS/tasks/enrichment'
+
+require 'AGS/tasks/excel'
 
 #require 'AGS/tasks/benchmarks'
 require 'knowledge_base/AGS'

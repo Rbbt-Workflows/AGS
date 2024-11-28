@@ -18,8 +18,16 @@ module AGS
     fc = fc_values[i_start].to_f
     fc -= fc_values[i_start-1].to_f unless i_start == 0
 
+    range_smooth_values = {
+      2 => 1,
+      4 => 1,
+      8 => 2,
+      24 => 4 
+    }
+
     (i_start+1..i_end).each do |ext_i|
-      fc += (fc_values[ext_i].to_f - fc_values[ext_i-1].to_f) / (TIME_POINTS[ext_i] - TIME_POINTS[ext_i-1])
+      #fc += (fc_values[ext_i].to_f - fc_values[ext_i-1].to_f) / (TIME_POINTS[ext_i] - TIME_POINTS[ext_i-1])
+      fc += (fc_values[ext_i].to_f - fc_values[ext_i-1].to_f) / range_smooth_values[TIME_POINTS[ext_i]]
     end
     return fc
   end
@@ -34,7 +42,7 @@ module AGS
     matrix = TSV.setup({}, :key_field => "Associated Gene Name", :fields => [sample_name], :type => :single, :cast => :to_f)
 
     fc_fields = TIME_POINTS.collect{|t| ["FC_#{treatment}", "T#{t}"] * "." }
-    TSV.traverse step(:vetted_genes), :into => matrix do |name,values,fields|
+    TSV.traverse step(:vetted_genes), :into => matrix, :bar => self.progress_bar("Building matrix") do |name,values,fields|
       name = name.first if Array === name
       NamedArray.setup(values, fields)
       fc_values = values.values_at(*fc_fields).collect{|v| v.first}
@@ -68,22 +76,15 @@ module AGS
                 clusters.each{|cluster| 
                   fc = AGS.range_value(fc_values, cluster, time_point)
                   break if ! fc.nil?
-                  #range = cluster.split(" ").last
-                  #range_start, range_end = range.split("-")
-                  #range_start = range_start.to_i
-                  #range_end = range_end.nil? ? range_start : range_end.to_i
-                  #next unless time_point == range_start
-                  #i_start = TIME_POINTS.index(range_start)
-                  #i_end = TIME_POINTS.index(range_end)
-
-                  #fc = fc_values[i_start].to_f
-                  #fc -= fc_values[i_start-1].to_f unless i_start == 0
-
-                  #(i_start+1..i_end).each do |ext_i|
-                  #  fc += (fc_values[ext_i].to_f - fc_values[ext_i-1].to_f) / (TIME_POINTS[ext_i] - TIME_POINTS[ext_i-1])
-                  #end
                 }
-                fc.nil? ? 0 : fc
+
+                if fc.nil?
+                  fc = fc_values[time_point_index].to_f
+                  fc -= fc_values[time_point_index-1].to_f unless time_point_index == 0
+                  fc
+                else
+                  fc
+                end
               else
                 raise
               end
@@ -97,25 +98,21 @@ module AGS
   dep :vetted_genes, :jobname => "Default"
   input :treatment, :select, "Treatment", nil, :select_options => TREATMENTS, :required => true
   input :time_point, :select, "Timepoint", nil, :select_options => TIME_POINTS, :required => true
-  input :synthesis, :boolean, "Filter for synthesis genes", false
+  input :vetting, :select, "Vetting scheme", :degradation, select_options: %w(none synthesis degradation relaxed_degradation) 
   input :dynamic, :boolean, "Filter for dynamic cluster profiles"
   input :dynamic_subset, :select, "Increase, decrease or both", :both, :select_options => %w(increase decrease both)
-  input :finegrained_degradation, :boolean, "Filter for finegrained dynamic degradation", true
   input :target_subset, :array, "Subset of genes to consider" 
-  task :decoupler_targets => :array do |treatment,time_point,synthesis,dynamic,dynamic_subset,finegrained_degradation,target_subset|
+  task :decoupler_targets => :array do |treatment,time_point,vetting,dynamic,dynamic_subset,target_subset|
 
     noisy_genes = Rbbt.data.noisy_genes.list
     TSV.traverse step(:vetted_genes), :into => :stream do |name,values,fields|
       name = name.first if Array === name
-      NamedArray.setup(values, fields)
-      next if synthesis && ! values["Vetted synthesis gene"].include?("true")
       next if noisy_genes.include?(name)
       next if target_subset && ! target_subset.include?(name)
+      NamedArray.setup(values, fields)
       cluters = values[treatment + ": FC clusters"]
-      #increase = cluters.include? "increase #{time_point}"
-      #decrease = cluters.include? "decrease #{time_point}"
-      increase = cluters.select{|c| c == "increase #{time_point}" || c.include?("increase #{time_point}-") }.any?
-      decrease = cluters.select{|c| c == "decrease #{time_point}" || c.include?("decrease #{time_point}-") }.any?
+      increase = cluters.select{|c| c == "increase #{time_point}h" || c.include?("increase #{time_point}-") }.any?
+      decrease = cluters.select{|c| c == "decrease #{time_point}h" || c.include?("decrease #{time_point}-") }.any?
 
       if dynamic
         case dynamic_subset.to_sym
@@ -130,32 +127,46 @@ module AGS
         end
       end
 
-      if finegrained_degradation and values["Degradation timepoints"].include?([treatment, time_point]*":")
-        next
+      case vetting.to_s
+      when 'synthesis'
+        next unless values["Vetted synthesis gene"].include?("true")
+      when 'degradation'
+        next if values["Strict extended degradation timepoints"].include?([treatment, time_point]*":")
+      when 'relaxed_degradation'
+        next if values["Relaxed extended degradation timepoints"].include?([treatment, time_point]*":")
       end
 
       name
     end
   end
 
-  dep SaezLab, :regulome
-  dep :decoupler_targets
+  input :ExTRI2_regulome, :boolean, "Use ExTRI2 regulome", false
+  dep SaezLab, :regulome, jobname: "Default" do |jobname,options|
+    if options[:ExTRI2_regulome] 
+      Workflow.require_workflow "ExTRI2"
+      {workflow: ExTRI2, inputs: options}
+    else
+      {inputs: options}
+    end
+  end
+  dep :decoupler_targets, compute: :produce
   task :filtered_regulome => :tsv do
     targets = step(:decoupler_targets).load
-    interesting_tfs = Rbbt.data.interesting_tfs.list
+    #interesting_tfs = Rbbt.data.interesting_tfs.list
     dumper = TSV::Dumper.new step(:regulome).load.options
     dumper.init
     TSV.traverse step(:regulome), :into => dumper do |id,values|
       tf, tg, weight = values
       next unless targets.include?(tg)
-      next unless interesting_tfs.include?(tf)
+      #next unless interesting_tfs.include?(tf)
       [id, [tf, tg, weight]]
     end
   end
 
   dep :timepoint_matrix
   dep :filtered_regulome
-  dep_task :timepoint_decoupler_pre, SaezLab, :decoupler, :matrix => :timepoint_matrix, :network => :filtered_regulome, :min_n => 5
+  input :min_n, :integer, "Minimum number of tf targets", 5
+  dep_task :timepoint_decoupler_pre, SaezLab, :decoupler, :matrix => :timepoint_matrix, :network => :filtered_regulome
 
   dep :timepoint_decoupler_pre
   input :threshold, :float, "P-value threshold", 0.05
@@ -178,7 +189,7 @@ module AGS
       end
       new[gene] = new_values
     end
-    new
+    new.select do |g,values| values.flatten.select{|v| v != 0 }.any? end
   end
 
   dep :timepoint_decoupler, :canfail => true do |jobname,options|
@@ -275,6 +286,4 @@ rbbt.plot.venn(data)
     EOF
     nil
   end
-
-
 end

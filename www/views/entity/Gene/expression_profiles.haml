@@ -6,7 +6,7 @@
   - ensembl = entity.to "Ensembl Gene ID"
   - name = entity.to :name
 
-  - clusters = AGS.job(:gene_clusters).run
+  - clusters = AGS.job(:change_offsets).run
   - %w(PI PD 5Z 5Z_PI PD_PI ).each do |experiment|
     = fragment do
       .ui.segment.clearfix
@@ -35,8 +35,6 @@
             - time_gene_counts[id] = [t,v]
             - id += 1
 
-        - Log.tsv time_gene_counts
-      
         .figure.float
           .title
             Gene counts in #{experiment}

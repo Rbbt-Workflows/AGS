@@ -1,143 +1,172 @@
 module AGS
 
-  input :pvalue_threshold, :float, "Threshold for decoupler p-value", 0.01
-  input :reported_method, :select, "Method to report", :prev_clust, :select_options => %w(best prev_clust prev_all diff)
-  dep :timepoint_decoupler,
-    :treatment => :placeholder, :time_point => :placeholder,
-    :threshold => :placeholder, :data_type => :placeholder, 
-    :dynamic => :placeholder  do |jobname,options|
-      jobs = []
-      pvalue_threshold = options[:pvalue_threshold]
-      AGS::TREATMENTS.each do |treatment|
-        AGS::TIME_POINTS.each_with_index do |time_point,index|
-          jobs << AGS.job(:timepoint_decoupler, treatment: treatment, time_point: time_point, data_type: :fc0, :threshold => pvalue_threshold)
-          jobs << AGS.job(:timepoint_decoupler, treatment: treatment, time_point: AGS::TIME_POINTS[index - 1], data_type: :fc0, :threshold => pvalue_threshold)
-          jobs << AGS.job(:timepoint_decoupler, treatment: treatment, time_point: time_point, data_type: :fc, :threshold => pvalue_threshold)
-          jobs << AGS.job(:timepoint_decoupler, treatment: treatment, time_point: time_point, data_type: :range, dynamic: true, :threshold => pvalue_threshold)
-        end
-      end
-      jobs.uniq
-    end
-  task :tf_offsets => :array do |pvalue_threshold, reported_method|
-    fc0_all = nil
-    fc_all = nil
-    fcf_all = nil
-
-    AGS::TREATMENTS.each do |treatment|
-      AGS::TIME_POINTS.each_with_index do |time_point,index|
-        fc0 = AGS.job(:timepoint_decoupler, treatment: treatment, time_point: time_point, data_type: :fc0, :threshold => pvalue_threshold).run
-        if index > 0
-          fc0_prev = AGS.job(:timepoint_decoupler, treatment: treatment, time_point: AGS::TIME_POINTS[index - 1], data_type: :fc0, :threshold => pvalue_threshold).run
-          fc0.fields do |field|
-            fc0.process field do |k,v|
-              v.to_f - fc0_prev[k][field].to_f
-            end
-          end
-        end
-
-        fc = AGS.job(:timepoint_decoupler, treatment: treatment, time_point: time_point, data_type: :fc, :threshold => pvalue_threshold).run
-
-        fcf = AGS.job(:timepoint_decoupler, treatment: treatment, time_point: time_point, data_type: :range, dynamic: true, :threshold => pvalue_threshold).run
-
-        fc_all = fc_all.nil? ? fc : fc_all.attach(fc, :complete => true)
-        fcf_all = fcf_all.nil? ? fcf : fcf_all.attach(fcf, :complete => true)
-        fc0_all = fc0_all.nil? ? fc0 : fc0_all.attach(fc0, :complete => true)
-      end
-    end
-
-    AGS::TREATMENTS.each do |treatment|
-      tpfc = fc_all.slice(fc_all.fields.select{|f| f.split("-").include?(treatment) })
-      tpfcf = fcf_all.slice(fcf_all.fields.select{|f| f.split("-").include?(treatment) })
-      tpfc0 = fc0_all.slice(fc0_all.fields.select{|f| f.split("-").include?(treatment) })
-
-      tpfc = tpfc.select{|k,l| l.select{|v| v.to_f != 0.0 }.any? }
-      tpfcf = tpfcf.select{|k,l| l.select{|v| v.to_f != 0.0 }.any? }
-      tpfc0 = tpfc0.select{|k,l| l.select{|v| v.to_f != 0.0 }.any? }
-
-      tpfc.fields = tpfc.fields.collect{|f| f + ' prev all' } 
-      tpfcf.fields = tpfcf.fields.collect{|f| f + ' prev clust' }
-      tpfc0.fields = tpfc0.fields.collect{|f| f + ' diff' }
-
-      data = tpfcf.attach tpfc, complete: true
-      data = data.attach tpfc0, complete: true
-
-      gene_pos_offsets = {}
-      gene_neg_offsets = {}
-      data.through do |gene,values|
-        prev = 0
-        values.each_with_index do |v,i|
-          if ! v.nil?
-            if v > 0 && prev <= 0
-              gene_pos_offsets[gene] ||= []
-              gene_pos_offsets[gene] << i
-            end
-            if v < 0 && prev >= 0
-              gene_neg_offsets[gene] ||= []
-              gene_neg_offsets[gene] << i
-            end
-          end
-          prev = (((i + 1) % 5 == 0) || i < 5) ? 0 : v.to_f
-        end
-      end
-
-      genes = (gene_neg_offsets.keys + gene_pos_offsets.keys).uniq
-
-      gene_timepoint_info = {}
-      genes.each do |gene|
-        offsets = (gene_pos_offsets[gene] || []) + (gene_neg_offsets[gene] || [])
-        offset_values = data[gene].values_at(*offsets)
-        offset_names = data.fields.values_at(*offsets)
-        offset_time_points = offset_names.collect{|n| n.match(/T(\d+)/)[1] }
-        offset_names.zip(offset_time_points, offset_values).each do |n, t, v|
-          method = n.partition(" ").last
-          gene_timepoint_info[gene] ||= {}
-          gene_timepoint_info[gene][t] ||= []
-          gene_timepoint_info[gene][t] << {method: method, value: v}
-        end
-      end
-
-      AGS::TIME_POINTS.each do |time_point|
-        tsv = TSV.setup({}, :key_field =>"Transcription factor (Associated Gene Name)", :fields => %w(Value Best All Conflict?), :type => :list)
-        gene_timepoint_info.each do |gene,info|
-          list = info[time_point.to_s]
-          next unless list && list.any?
-          all_values = list.collect{|e| e[:value]}
-          all = list.collect{|e| e[:method] }
-          case reported_method.to_sym
-          when :best
-            max = all_values.max
-            best = list.select{|e| e[:value] == max}.first[:method]
-          when :prev_clust
-            next unless all.include?("prev clust")
-            max = list.select{|e| e[:method] == "prev clust"}.first[:value]
-            best = reported_method
-          when :prev_all
-            next unless all.include?("prev all")
-            max = list.select{|e| e[:method] == "prev all"}.first[:value]
-            best = reported_method
-          when :diff
-            next unless all.include?("diff")
-            max = list.select{|e| e[:method] == "diff"}.first[:value]
-            best = reported_method
-          end
-          confict = all_values.select{|v| v > 0 }.any? && all_values.select{|v| v < 0 }.any?
-          tsv[gene] = [max, best, all * "|", confict]
-        end
-        file([treatment, time_point] * "-T" + ".tsv").write(tsv.to_s)
-      end
-    end
-    files_dir.glob("*.tsv")
-  end
-
-  dep :tf_offsets
-  input :treatment, :select, "Treatment", nil, :select_options => TREATMENTS, :required => true
-  task :tf_treatment_offsets => :tsv do |treatment|
-    tf_offset_job = step(:tf_offsets)
-
-    AGS::TIME_POINTS.inject(nil) do |acc,timepoint|
-      tsv = tf_offset_job.file([treatment, timepoint] * "-T" + ".tsv").tsv :fields => %w(Value)
-      tsv.fields = ["T" + timepoint.to_s]
-      acc = acc.nil? ? tsv : acc.attach(tsv)
+  dep :timepoint_decoupler, time_point: :placeholder, data_type: :fc0, dynamic: false do |jobname,options|
+    AGS::TIME_POINTS.collect do |time_point,index|
+      options.merge({time_point: time_point})
     end
   end
+  task :treatment_tfs_diff => :tsv do
+    tsvs = []
+    AGS::TIME_POINTS.each_with_index do |time_point,index|
+      job = dependencies.select{|d| d.recursive_inputs[:time_point] == time_point }.first
+      if index > 0
+        prev_time_point = AGS::TIME_POINTS[index-1]
+        previous_job = dependencies.select{|d| d.recursive_inputs[:time_point] == prev_time_point }.first
+      end
+
+      tsv = job.load
+
+      if previous_job
+        previous_tsv = previous_job.load
+        tsv.fields do |field|
+          tsv.process field do |k,v|
+            v.to_f - previous_tsv[k][field].to_f
+          end
+        end
+      end
+
+      tsvs << tsv
+    end
+
+    tsvs.inject do |acc,tsv| acc.attach tsv, complete: true end
+  end
+
+  dep :timepoint_decoupler, time_point: :placeholder, data_type: :fc, dynamic: false do |jobname,options|
+    AGS::TIME_POINTS.collect do |time_point,index|
+      options.merge({time_point: time_point})
+    end
+  end
+  task :treatment_tfs_non_dynamic => :tsv do
+    tsvs = []
+    AGS::TIME_POINTS.each_with_index do |time_point,index|
+      job = dependencies.select{|d| d.recursive_inputs[:time_point] == time_point }.first
+
+      tsv = job.load
+
+      tsvs << tsv
+    end
+
+    tsvs.inject do |acc,tsv| acc.attach tsv, complete: true end
+  end
+
+  input :data_type, :select, "Values to use", :range, :select_options => %w(fc fc0 ext_fc binary range)
+  dep :timepoint_decoupler, time_point: :placeholder, dynamic: true do |jobname,options|
+    AGS::TIME_POINTS.collect do |time_point,index|
+      options.merge({time_point: time_point})
+    end
+  end
+  task :treatment_tfs_dynamic => :tsv do
+    tsvs = []
+    AGS::TIME_POINTS.each_with_index do |time_point,index|
+      job = dependencies.select{|d| d.recursive_inputs[:time_point] == time_point }.first
+
+      tsv = job.load
+
+      tsvs << tsv
+    end
+
+    tsvs.inject do |acc,tsv| acc.attach tsv, complete: true end
+  end
+
+
+  dep :treatment_tfs_dynamic, threshold: 0.05, synthesis: false, vetting: 'degradation', data_type: :range
+
+  #Exclude 
+  dep :treatment_tfs_dynamic, threshold: 0.05, vetting: 'none', data_type: :range
+  dep :treatment_tfs_dynamic, threshold: 0.05, vetting: 'synthesis', data_type: :range
+  dep :treatment_tfs_dynamic, threshold: 0.05, vetting: 'degradation', data_type: :range
+  dep :treatment_tfs_dynamic, threshold: 0.05, vetting: 'relaxed_degradation', data_type: :range
+
+  #Score 
+  dep :treatment_tfs_dynamic, threshold: 0.01, vetting: 'degradation', data_type: :range
+  dep :treatment_tfs_dynamic, threshold: 0.05, vetting: 'extended_degradation', data_type: :range
+  dep :treatment_tfs_non_dynamic, threshold: 0.05, vetting: 'degradation'
+  dep :treatment_tfs_diff, threshold: 0.05, vetting: 'degradation'
+  dep :treatment_tfs_dynamic, threshold: 0.05, vetting: 'none', data_type: :range
+  input :score_points, :array, "Score points for each scoring job", [1, 2, 0.5, 0.5, 0]
+  task :treatment_tfs_priority => :tsv do |score_points|
+    orig, exclude1, exclude2, exclude3, exclude4, *score = dependencies
+
+    orig = orig.load
+
+    [exclude1, exclude2, exclude3, exclude4].each do |exclude|
+      exclude_tsv = exclude.load
+      exclude_tsv.through do |gene,values|
+        current = orig[gene]
+        next if current.nil?
+        values.to_hash.each do |field,value|
+          next if value == 0
+          if (value > 0) != (current[field] > 0)
+            current[field] = 0
+          end
+        end
+        orig[gene] = current
+      end
+    end
+
+    orig.fields.each do |field|
+      orig.add_field "Score #{field}" do
+        0
+      end
+    end
+
+    score.zip(score_points).each do |score_job,score_points|
+      exclude_tsv = score_job.load
+      exclude_tsv.through do |gene,values|
+        current = orig[gene]
+        next if current.nil?
+        values.to_hash.each do |field,value|
+          score = current["Score #{field}"]
+          next if value == 0
+          next if current[field].nil?
+          next if current[field] == 0
+          if (value > 0) != (current[field] > 0)
+            score -= score_points
+          else
+            score += score_points
+          end
+          current["Score #{field}"] = score
+        end
+        orig[gene] = current
+      end
+    end
+
+    orig
+  end
+
+
+  dep :treatment_tfs_priority
+  dep :change_offsets
+  task :treatment_tfs_priority_consistency => :tsv do
+    treatment =recursive_inputs[:treatment]
+    changes = step(:change_offsets).load
+    fields = AGS::TIME_POINTS.collect{|t| "Consistent at #{t}h" }
+    consistency = TSV.setup({}, key_field: "Associated Gene Name", fields: fields, type: :list)
+    traverse step(:treatment_tfs_priority), into: consistency do |gene,values|
+      next unless changes.include?(gene)
+
+      gene_changes = changes[gene][treatment]
+      negative_activities = gene_changes.select{|c| c.include?("decrease")}.
+        collect{|c| c.split(" ").last.to_i}.collect{|t| AGS::TIME_POINTS.index(t)}.
+        collect{|i| [i, i+1]}.flatten.reject{|i| i > 5}.uniq.
+        collect{|i| AGS::TIME_POINTS[i] }
+
+      positive_activities = gene_changes.select{|c| c.include?("increase")}.
+        collect{|c| c.split(" ").last.to_i}.collect{|t| AGS::TIME_POINTS.index(t)}.
+        collect{|i| [i, i+1]}.flatten.reject{|i| i > 5}.uniq.
+        collect{|i| AGS::TIME_POINTS[i] }
+
+      
+      res = []
+      AGS::TIME_POINTS.each_with_index do |time_point,i|
+        res << (values[i] > 0 && positive_activities.include?(time_point)) || (values[i] < 0 && negative_activities.include?(time_point))
+      end
+      res = res.collect{|c| c ? 1 : 0 }
+      [gene, res]
+    end
+    tsv = step(:treatment_tfs_priority).load.attach consistency
+    tsv.cast = nil
+    tsv
+  end
+
 end

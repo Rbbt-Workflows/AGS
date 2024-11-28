@@ -1,9 +1,5 @@
 require 'rbbt/sources/organism'
-
-#module Entity::REST
-#  USE_ENSEMBL = false
-#
-#end
+require 'rbbt/util/python'
 
 Workflow.require_workflow "Genomics"
 

@@ -24,6 +24,11 @@ AGS=/$PWD filter="*.rb *.rake Rakefile *.rdoc *.R *.sh *.js *.haml *.sass *.txt 
    decoupler.rb
    decoupler_old.rb
    offset.rb
+
+   enrichment.rb
+
+   excel.rb
+
    timepoint_heatmaps.rb
    downstream_targets.rb
    consistency.rb
@@ -34,15 +39,18 @@ AGS=/$PWD filter="*.rb *.rake Rakefile *.rdoc *.R *.sh *.js *.haml *.sass *.txt 
   test_helper.rb
  }
  data=data filter="*"{
-  dbTFs_expressed_in_AGS.list
   AGS_dbTFs.list
+  Roma.genes
   cluster_groups.tsv
+  dbTFs_expressed_in_AGS.list
   gene_modules.tsv
+  gene_tf_type.tsv
   good_tfs.list
   interesting_tfs.list
+  interesting_tfs.list.old
+  noisy_genes.list
   not_expressed.list
   super_cluster_names.tsv
-  noisy_genes.list
   FC=FC{
    deseq2_log2foldchange_ashrshrink_outliersremoved_untreatedT0asreference_independentfiltering.txt
    deseq2_pvalue_fdradjusted_outliersremoved_untreatedT0asreference_independentfiltering.txt
@@ -50,7 +58,7 @@ AGS=/$PWD filter="*.rb *.rake Rakefile *.rdoc *.R *.sh *.js *.haml *.sass *.txt 
   }
  }
  www=www{
-  views=views{
+  views=views filter = "*"{
    AGS=AGS{
     decoupler=decoupler{
      job_result.haml
@@ -63,8 +71,11 @@ AGS=/$PWD filter="*.rb *.rake Rakefile *.rdoc *.R *.sh *.js *.haml *.sass *.txt 
     }
    }
    main=main{
-    profiles.haml
     heatmaps.haml
+    priority_tfs.haml
+    profiles.haml
+    gene_sets.haml
+    gene_set_excel.haml
     test.haml
    }
    entity_list=entity_list{
@@ -83,8 +94,8 @@ AGS=/$PWD filter="*.rb *.rake Rakefile *.rdoc *.R *.sh *.js *.haml *.sass *.txt 
     Cluster.haml
     Gene.haml
     Gene=Gene{
-     expression_profiles.haml
      change_offsets.haml
+     expression_profiles.haml
      target_gene_heatmap.haml
     }
     Treatment.haml

@@ -157,6 +157,8 @@ module AGS
       index[n]
     end
 
+    s = s.subset(Rbbt.data["Roma.genes"].list)
+
     s = s.reorder :key, ["Ensembl Gene ID"] + s.fields[0..-2] 
     clusters = step(:change_offsets).load
     clusters.fields = clusters.fields.collect{|f| [f, " FC clusters"] * ":" }
@@ -199,41 +201,41 @@ module AGS
     end
   end
 
-  desc "Degradation genes are regulated by degradation in more treatments than processing and synthesis"
-  dep :full_gene_info
-  input :degradation_criteria, :select, "Criteria to define synthesis", :mayority, :select_options => %w(mayority one two three)
-  task :degradation_genes => :tsv do |criteria|
-    criteria = criteria.to_sym
-    tsv = step(:full_gene_info).load
+  #desc "Degradation genes are regulated by degradation in more treatments than processing and synthesis"
+  #dep :full_gene_info
+  #input :degradation_criteria, :select, "Criteria to define synthesis", :mayority, :select_options => %w(mayority one two three)
+  #task :degradation_genes => :tsv do |criteria|
+  #  criteria = criteria.to_sym
+  #  tsv = step(:full_gene_info).load
 
-    synthesis_pos = tsv.fields.select{|f| f =~ /synthesis$/ }.collect{|f| tsv.fields.index f }
-    processing_pos = tsv.fields.select{|f| f =~ /processing$/ }.collect{|f| tsv.fields.index f }
-    degradation_pos = tsv.fields.select{|f| f =~ /degradation$/ }.collect{|f| tsv.fields.index f }
-    threshold = 0.05
-    tsv.add_field "Degradation gene" do |k,values|
-      synthesis_values = values.values_at(*synthesis_pos).collect{|f| f.first.to_f  < threshold }
-      processing_values = values.values_at(*processing_pos).collect{|f| f.first.to_f  < threshold }
-      degradation_values = values.values_at(*degradation_pos).collect{|f| f.first.to_f  < threshold }
+  #  synthesis_pos = tsv.fields.select{|f| f =~ /synthesis$/ }.collect{|f| tsv.fields.index f }
+  #  processing_pos = tsv.fields.select{|f| f =~ /processing$/ }.collect{|f| tsv.fields.index f }
+  #  degradation_pos = tsv.fields.select{|f| f =~ /degradation$/ }.collect{|f| tsv.fields.index f }
+  #  threshold = 0.05
+  #  tsv.add_field "Degradation gene" do |k,values|
+  #    synthesis_values = values.values_at(*synthesis_pos).collect{|f| f.first.to_f  < threshold }
+  #    processing_values = values.values_at(*processing_pos).collect{|f| f.first.to_f  < threshold }
+  #    degradation_values = values.values_at(*degradation_pos).collect{|f| f.first.to_f  < threshold }
 
-      synthesis_count = synthesis_values[1..-1].select{|v| v }.length
-      processing_count = processing_values[1..-1].select{|v| v }.length
-      degradation_count = degradation_values[1..-1].select{|v| v }.length
+  #    synthesis_count = synthesis_values[1..-1].select{|v| v }.length
+  #    processing_count = processing_values[1..-1].select{|v| v }.length
+  #    degradation_count = degradation_values[1..-1].select{|v| v }.length
 
-      degradation = case criteria
-                  when :mayority
-                    degradation_count >= 1 && (degradation_count == [synthesis_count, processing_count, degradation_count].max)
-                  when :one
-                    degradation_count >= 1
-                  when :two
-                    degradation_count >= 2
-                  when :three
-                    degradation_count >= 3
-                  else
-                    raise "Criteria not understood #{criteria}"
-                  end
-      [degradation]
-    end
-  end
+  #    degradation = case criteria
+  #                when :mayority
+  #                  degradation_count >= 1 && (degradation_count == [synthesis_count, processing_count, degradation_count].max)
+  #                when :one
+  #                  degradation_count >= 1
+  #                when :two
+  #                  degradation_count >= 2
+  #                when :three
+  #                  degradation_count >= 3
+  #                else
+  #                  raise "Criteria not understood #{criteria}"
+  #                end
+  #    [degradation]
+  #  end
+  #end
 
   desc "Vetted genes are systhesis genes where the up or down synthesis trends coincide with heuristic clustering in at least one timepoint in at least on treatment"
   dep :synthesis_genes
@@ -277,6 +279,45 @@ module AGS
         matches.collect{|m| [treatment, time_points[m]] * ":" }
       end.flatten
     end
+    
+    extend_degradation = proc do |min,k,values|
+      matches = values["Degradation timepoints"]
+      next unless matches.length >= min
+      new_matches = []
+      matches.each do |m| 
+        treatment, time_point = m.split(":")
+        time_index = time_points.index time_point.to_i
+        clusters = values[treatment + ": FC clusters"]
+        directions = clusters.select do |c| 
+          cluster_time_index = time_points.index(c.split(" ").last.to_i)
+          (cluster_time_index >= time_index - 1) && 
+            (cluster_time_index <= time_index + 1)
+        end.collect do |c|
+          c.split(" ").first
+        end.flatten.uniq 
+
+        next if directions.length > 1
+        direction = directions.first
+
+        treatments.each do |treatment|
+          clusters = values[treatment + ": FC clusters"]
+          clusters.each do |c|
+            next unless c.split(" ").first == direction
+            cluster_time_index = time_points.index(c.split(" ").last.to_i)
+            new_matches << [treatment, time_points[cluster_time_index]] * ":"
+          end
+        end
+      end
+      (new_matches + matches).uniq
+    end
+
+    tsv.add_field "Strict extended degradation timepoints" do |k,values|
+      extend_degradation.call(2, k, values)
+    end
+
+    tsv.add_field "Relaxed extended degradation timepoints" do |k,values|
+      extend_degradation.call(1, k, values)
+    end
 
     tsv.add_field "Treatment synthesis profile match" do |k,values|
       treatments.select do |treatment|
@@ -319,6 +360,12 @@ module AGS
       values["Treatment synthesis profile match"].any? && values["Synthesis gene"].first.to_s == "true"
     end
 
+  end
+
+  dep :vetted_genes
+  task :all_genes => :array do
+    noisy_genes = Rbbt.data.noisy_genes.list
+    step(:vetted_genes).load.keys - noisy_genes
   end
 
   dep :vetted_genes
@@ -368,28 +415,28 @@ module AGS
     res
   end
 
-  dep :degradation_genes
-  task :degradation_gene_list => :array do
-    step(:degradation_genes).load.select("Degradation gene" => "true").column("Associated Gene Name").values.flatten.uniq
-  end
+  #dep :degradation_genes
+  #task :degradation_gene_list => :array do
+  #  step(:degradation_genes).load.select("Degradation gene" => "true").column("Associated Gene Name").values.flatten.uniq
+  #end
 
-  dep :degradation_gene_list
-  dep ExTRI, :CollecTRI
-  task :degradation_gene_overlap => :tsv do
-    tsv = step(:CollecTRI).load.reorder "Transcription Factor (Associated Gene Name)", ["Target Gene (Associated Gene Name)"]
-    vetted_genes = step(:degradation_gene_list).load
-    all_genes = step(:degradation_genes).load.column("Associated Gene Name").values.flatten.uniq
-    res = TSV.setup({}, :key_field => "Statistic", :fields => ["Value"], :type => :single, :cast => :to_f)
+  #dep :degradation_gene_list
+  #dep ExTRI, :CollecTRI
+  #task :degradation_gene_overlap => :tsv do
+  #  tsv = step(:CollecTRI).load.reorder "Transcription Factor (Associated Gene Name)", ["Target Gene (Associated Gene Name)"]
+  #  vetted_genes = step(:degradation_gene_list).load
+  #  all_genes = step(:degradation_genes).load.column("Associated Gene Name").values.flatten.uniq
+  #  res = TSV.setup({}, :key_field => "Statistic", :fields => ["Value"], :type => :single, :cast => :to_f)
 
-    res["Total genes"] = all_genes.length
-    res["Total vetted"] = vetted_genes.length
-    res["CollecTRI targets"] = tsv.values.flatten.uniq.length
-    res["Overlap"] = (tsv.values.flatten.uniq & vetted_genes).length
-    res["Overlap %"] = ((100.0) * (tsv.values.flatten.uniq & vetted_genes).length) / vetted_genes.length
-    res["All CollecTRI targets"] = (tsv.values.flatten.uniq & all_genes).length
-    res["All Overlap %"] = ((100.0) * (tsv.values.flatten.uniq & all_genes).length) / all_genes.length
+  #  res["Total genes"] = all_genes.length
+  #  res["Total vetted"] = vetted_genes.length
+  #  res["CollecTRI targets"] = tsv.values.flatten.uniq.length
+  #  res["Overlap"] = (tsv.values.flatten.uniq & vetted_genes).length
+  #  res["Overlap %"] = ((100.0) * (tsv.values.flatten.uniq & vetted_genes).length) / vetted_genes.length
+  #  res["All CollecTRI targets"] = (tsv.values.flatten.uniq & all_genes).length
+  #  res["All Overlap %"] = ((100.0) * (tsv.values.flatten.uniq & all_genes).length) / all_genes.length
 
-    res
-  end
+  #  res
+  #end
 
 end

@@ -39,6 +39,29 @@ module AGS
     segments.collect{|s,e| ([s,e].uniq.collect{|i| AGS::TIME_POINTS[i] } * "-") + "h" }
   end
 
+  def self.expand_offsets(offsets, fcs_one, thresholds)
+    offsets.collect do |offset|
+
+      type, interval = offset.split(" ")
+      interval = interval[0..-2]
+      start, eend = interval.split("-")
+      eend = start if eend.nil?
+
+      eend_index = AGS::TIME_POINTS.index eend.to_i
+      while eend_index < AGS::TIME_POINTS.length && 
+          (type == 'increase' ? fcs_one[eend_index] > thresholds[eend_index] : fcs_one[eend_index] < - thresholds[eend_index])
+        eend_index += 1
+      end
+
+      eend = AGS::TIME_POINTS[eend_index-1] || 24
+
+      interval = [start.to_i, eend].uniq * "-" + "h"
+
+      new_offset = [type, interval] * " "
+      new_offset
+    end
+  end
+
   def self.clean_offsets(offsets)
     clean_offsets = []
     last = nil
@@ -120,6 +143,8 @@ module AGS
 
     clusters = AGS.clean_offsets(clusters)
 
+    clusters = AGS.expand_offsets(clusters, fcs_one, inputs.values_at(*AGS::TIME_POINTS.collect{|time_point| "low_min_#{time_point}h" }))
+
     clusters = ["unclassified"] if clusters.empty?
 
     clusters
@@ -128,28 +153,28 @@ module AGS
   dep :fold_changes, :fc_source => "NTNU"
   dep :pvalues, :fc_source => "NTNU"
   input :protein_coding, :boolean, "Only keep protein coding genes", true
-  input :low_min_1h, :float, "", 0.1
+  input :low_min_1h, :float, "", 0.13
   input :mid_min_1h, :float, "", 0.15
   input :high_min_1h, :float, "", 0.25
   input :next_min_1h, :float, "", 0.02
   input :low_multiplier_1h, :float, "", 8
   input :mid_multiplier_1h, :float, "", 0.6
-  input :low_min_2h, :float, "", 0.1
+  input :low_min_2h, :float, "", 0.13
   input :mid_min_2h, :float, "", 0.15
   input :high_min_2h, :float, "", 0.3
-  input :next_min_2h, :float, "", 0.05
+  input :next_min_2h, :float, "", 0.02
   input :low_multiplier_2h, :float, "", 8
   input :mid_multiplier_2h, :float, "", 0.5
-  input :low_min_4h, :float, "", 0.1
+  input :low_min_4h, :float, "", 0.13
   input :mid_min_4h, :float, "", 0.15
   input :high_min_4h, :float, "", 0.3
-  input :next_min_4h, :float, "", 0.05
+  input :next_min_4h, :float, "", 0.02
   input :low_multiplier_4h, :float, "", 10
   input :mid_multiplier_4h, :float, "", 0.50
-  input :low_min_8h, :float, "", 0.1
+  input :low_min_8h, :float, "", 0.13
   input :mid_min_8h, :float, "", 0.15
   input :high_min_8h, :float, "", 0.3
-  input :next_min_8h, :float, "", 0.10
+  input :next_min_8h, :float, "", 0.02
   input :low_multiplier_8h, :float, "", 12
   input :mid_multiplier_8h, :float, "", 0.5
   input :low_min_24h, :float, "", 0.3
