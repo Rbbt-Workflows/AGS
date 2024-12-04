@@ -25,12 +25,15 @@
 - page_options = {vetting: vetting, threshold: pvalue_threshold, ExTRI2_regulome: use_ExTRI2_regulome, method: decoupler_method}
 
 - jobs = AGS::TREATMENTS.collect{|treatment| [AGS.job(:treatment_tfs_non_dynamic, page_options.merge(treatment: treatment)), AGS.job(:treatment_tfs_dynamic, page_options.merge(treatment: treatment)), AGS.job(:treatment_tfs_diff, page_options.merge(treatment: treatment))]}.flatten
--# rules = {SaezLab: {decoupler: {resources: {cpus: cpus}}}}
--# Workflow::Orchestrator.process(rules, jobs) if jobs.reject{|job| job.done? }.any?
-- require 'rbbt/hpc'
-- jobs.each do |job|
+-# jobs.delete_if(&:done?)
+-# jobs.each(&:fork)
+-# Step.wait_for_jobs jobs
+- rules = {SaezLab: {decoupler: {resources: {cpus: cpus}}}}
+- Workflow::Orchestrator.process(rules, jobs) if jobs.reject{|job| job.done? }.any?
+-# require 'rbbt/hpc'
+-# jobs.each do |job|
   - HPC::SLURM.orchestrate_job(job, {})
-- Step.wait_for_jobs jobs
+-# Step.wait_for_jobs jobs
 
 = action_card_render action_card do
 

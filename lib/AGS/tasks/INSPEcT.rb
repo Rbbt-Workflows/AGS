@@ -157,12 +157,56 @@ module AGS
       index[n]
     end
 
-    s = s.subset(Rbbt.data["Roma.genes"].list)
+    #s = s.subset(Rbbt.data["Roma.genes"].list)
 
     s = s.reorder :key, ["Ensembl Gene ID"] + s.fields[0..-2] 
     clusters = step(:change_offsets).load
     clusters.fields = clusters.fields.collect{|f| [f, " FC clusters"] * ":" }
-    s.attach clusters
+    tsv = s.attach clusters
+
+
+    log :gene_info, "Identifiers"
+    gene_info = Organism.identifiers(AGS.organism).tsv(:key_field => "Associated Gene Name", :fields => ["Ensembl Gene ID"], :type => :double)
+    log :gene_info, "Transcripts"
+    gene_info = gene_info.attach Organism.transcripts(AGS.organism), :fields => ["Ensembl Transcript ID"]
+    log :gene_info, "Biotype"
+    gene_info = gene_info.attach Organism.transcript_biotype(AGS.organism), :fields => ["Ensembl Transcript Biotype"], one2one: true
+
+    protein_coding_genes = Set.new(gene_info.select("Ensembl Transcript Biotype" => 'protein_coding').keys)
+
+    tsv.add_field "Protein coding" do |gene,values|
+      protein_coding_genes.include?(gene)
+    end
+
+    treatments = %w(FiveZ INT_FiveZ_PI INT_PD_PI PD PI)
+    time_points = [0,1,2,4,8,24]
+
+    tsv.add_field "FC gene" do |k,values|
+      fc = false
+      treatments.each do |treatment|
+        time_points.each do |time_point|
+          next if time_point == 0
+          fc = true if values["FC_#{treatment}.T#{time_point}"].any?
+        end
+      end
+      fc
+    end
+
+    tsv.add_field "INsPECT gene" do |k,values|
+      inspect = false
+      treatments.each do |treatment|
+        inspect = true if values["#{treatment}: geneClass"].any?
+      end
+      inspect
+    end
+
+    tsv.add_field "Dynamic gene" do |k,values|
+      dynamic = false
+      treatments.each do |treatment|
+        dynamic = true if (values["#{treatment}: FC clusters"] - ['unclassified']).any?
+      end
+      dynamic
+    end
   end
 
   desc "Synthesis genes are regulated by syntesis in more treatments than processing and degradation"
@@ -359,14 +403,29 @@ module AGS
     tsv.add_field "Vetted synthesis gene" do |k,values|
       values["Treatment synthesis profile match"].any? && values["Synthesis gene"].first.to_s == "true"
     end
-
   end
 
   dep :vetted_genes
-  task :all_genes => :array do
-    noisy_genes = Rbbt.data.noisy_genes.list
-    step(:vetted_genes).load.keys - noisy_genes
+  task :inspect_genes => :array do
+    step(:vetted_genes).load.select("INSPEcT gene" => "true").keys
   end
+
+  dep :vetted_genes
+  task :dynamic_genes => :array do
+    step(:vetted_genes).load.select("Dynamic gene" => "true").keys
+  end
+
+  dep :vetted_genes
+  task :expressed_coding_genes => :array do
+    step(:vetted_genes).load.select("FC gene" => "true").select("Protein coding" => 'true').keys
+  end
+
+  dep :inspect_genes
+  dep :dynamic_genes
+  task :inspect_dynamic_genes => :array do
+    step(:inspect_genes).load & step(:dynamic_genes).load
+  end
+
 
   dep :vetted_genes
   dep ExTRI, :CollecTRI

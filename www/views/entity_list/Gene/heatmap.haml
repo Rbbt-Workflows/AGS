@@ -10,6 +10,7 @@
   - tsv.each do |k,vs|
     - new[k] = vs.collect{|v| v *= 10; v < -1 ? - Math.log(-v) : (v < 1 ? 0 : Math.log(v)) }
   - tsv = new
+  - tsv = tsv.reorder :key, AGS::TREATMENTS.collect{|t| AGS::TIME_POINTS.collect{|tp| "FC_#{t}.T#{tp}" }}.flatten
 
   = tool :Rpng, :plot => "rbbt.require('pheatmap');pheatmap(data, cluster_cols=FALSE)", :data => tsv
  

@@ -26,6 +26,7 @@
       - id = Misc.digest(values*":")
       - melt[id] = values
 
+  - Log.tsv melt
   - experiments = melt.column("Experiment").values.flatten.uniq
   - time = melt.column("Time").values.flatten.uniq
   - melt_median = TSV.setup({}, "ID~Experiment,Time,Median")
@@ -37,6 +38,5 @@
   -#= tool :Rggplot, :plot => "ggplot(data) + geom_smooth(aes(x=Time, y=Value, group=Experiment, color=Experiment,fill=Experiment)) + theme(text = element_text(size = 5))", :data => melt, :size => 5
   = tool :Rggplot, :plot => "ggplot(data, aes(x=Time, y=Value, group=Experiment, color=Experiment)) #{log_time ? " + scale_x_continuous(trans='log2')" : ""} #{show_points ? "+ geom_jitter(size=0.01,aes(width=2),alpha=0.2) " : "" } + geom_smooth(aes(fill=Experiment), method='gam', formula=y ~ s(x, bs = 'cs', k=5)) + #{max ? "ylim(-#{max},#{max}) +" : "" } theme(text = element_text(size = 5))", :data => melt, :size => 3
 
-  = tool :Rggplot, :plot => "ggplot(data, aes(x=Time, y=Median, group=Experiment, color=Experiment)) #{log_time ? " + scale_x_continuous(trans='log2')" : ""} + geom_line() + #{max ? "ylim(-#{max},#{max}) +" : "" } theme(text = element_text(size = 5))", :data => melt_median, :size => 3
-
+  -#= tool :Rggplot, :plot => "ggplot(data, aes(x=Time, y=Median, group=Experiment, color=Experiment)) #{log_time ? " + scale_x_continuous(trans='log2')" : ""} + geom_line() + #{max ? "ylim(-#{max},#{max}) +" : "" } theme(text = element_text(size = 5))", :data => melt_median, :size => 3
 

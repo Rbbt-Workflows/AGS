@@ -1,5 +1,4 @@
 require 'rbbt/sources/organism'
-require 'rbbt/util/python'
 
 Workflow.require_workflow "Genomics"
 

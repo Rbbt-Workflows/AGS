@@ -45,6 +45,11 @@ module AGS
     TSV.traverse step(:vetted_genes), :into => matrix, :bar => self.progress_bar("Building matrix") do |name,values,fields|
       name = name.first if Array === name
       NamedArray.setup(values, fields)
+
+      next unless values["Protein coding"].include?("true")
+      next unless values["Dynamic gene"].include?("true")
+      next unless values["INSPEcT gene"].include?("true")
+
       fc_values = values.values_at(*fc_fields).collect{|v| v.first}
       clusters = values[treatment + ": FC clusters"]
 
@@ -141,24 +146,31 @@ module AGS
   end
 
   input :ExTRI2_regulome, :boolean, "Use ExTRI2 regulome", false
-  dep SaezLab, :regulome, jobname: "Default" do |jobname,options|
-    if options[:ExTRI2_regulome] 
-      Workflow.require_workflow "ExTRI2"
-      {workflow: ExTRI2, inputs: options}
-    else
-      {inputs: options}
+  dep ExTRI2, :regulome, jobname: "Default", 
+    only_authoritative_tfs: true,
+    remove_auto_regulation: false,
+    no_MoR: false do |jobname,options|
+      if options[:ExTRI2_regulome] 
+        Workflow.require_workflow "ExTRI2"
+        {workflow: ExTRI2, inputs: options}
+      else
+        {inputs: options}
+      end
     end
-  end
   dep :decoupler_targets, compute: :produce
-  task :filtered_regulome => :tsv do
+  dep :expressed_coding_genes
+  input :only_dbTF, :boolean, "Use only dbTFs", false
+  task :filtered_regulome => :tsv do |only_dbTF|
+    tf_types = Rbbt.data["alternative_TF-sets_for_EXTRI1-2-regulomes.tsv"].tsv
     targets = step(:decoupler_targets).load
-    #interesting_tfs = Rbbt.data.interesting_tfs.list
+    expressed_coding_genes = step(:expressed_coding_genes).load
     dumper = TSV::Dumper.new step(:regulome).load.options
     dumper.init
     TSV.traverse step(:regulome), :into => dumper do |id,values|
       tf, tg, weight = values
       next unless targets.include?(tg)
-      #next unless interesting_tfs.include?(tf)
+      next unless expressed_coding_genes.include?(tf)
+      next if only_dbTF && ! tf_types[tf] == "dbTF"
       [id, [tf, tg, weight]]
     end
   end

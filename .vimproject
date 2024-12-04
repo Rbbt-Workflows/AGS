@@ -29,6 +29,8 @@ AGS=/$PWD filter="*.rb *.rake Rakefile *.rdoc *.R *.sh *.js *.haml *.sass *.txt 
 
    excel.rb
 
+   adhoc.rb
+
    timepoint_heatmaps.rb
    downstream_targets.rb
    consistency.rb
@@ -51,6 +53,7 @@ AGS=/$PWD filter="*.rb *.rake Rakefile *.rdoc *.R *.sh *.js *.haml *.sass *.txt 
   noisy_genes.list
   not_expressed.list
   super_cluster_names.tsv
+  coTFs.list
   FC=FC{
    deseq2_log2foldchange_ashrshrink_outliersremoved_untreatedT0asreference_independentfiltering.txt
    deseq2_pvalue_fdradjusted_outliersremoved_untreatedT0asreference_independentfiltering.txt
@@ -84,6 +87,7 @@ AGS=/$PWD filter="*.rb *.rake Rakefile *.rdoc *.R *.sh *.js *.haml *.sass *.txt 
      heatmap.haml
      expression.haml
      decoupler.haml
+     decoupler.check
      decoupler.old
      graph.haml
      graph.check

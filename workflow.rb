@@ -7,7 +7,7 @@ Misc.add_libdir if __FILE__ == $0
 #require 'rbbt/sources/AGS'
 
 Workflow.require_workflow "SaezLab"
-
+Workflow.require_workflow "ExTRI2"
 
 module AGS
   extend Workflow
@@ -283,7 +283,10 @@ require 'AGS/tasks/enrichment'
 
 require 'AGS/tasks/excel'
 
+require 'AGS/tasks/adhoc'
+
 #require 'AGS/tasks/benchmarks'
 require 'knowledge_base/AGS'
 #require 'rbbt/entity/AGS'
 
+Workflow.main = AGS
