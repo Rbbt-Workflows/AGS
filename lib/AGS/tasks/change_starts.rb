@@ -154,33 +154,33 @@ module AGS
   dep :fold_changes, :fc_source => "NTNU"
   dep :pvalues, :fc_source => "NTNU"
   input :protein_coding, :boolean, "Only keep protein coding genes", true
-  input :low_min_1h, :float, "", 0.13
+  input :low_min_1h, :float, "", 0.7
   input :mid_min_1h, :float, "", 0.15
   input :high_min_1h, :float, "", 0.25
   input :next_min_1h, :float, "", 0.02
   input :low_multiplier_1h, :float, "", 8
-  input :mid_multiplier_1h, :float, "", 0.6
-  input :low_min_2h, :float, "", 0.13
+  input :mid_multiplier_1h, :float, "", 10
+  input :low_min_2h, :float, "", 0.1
   input :mid_min_2h, :float, "", 0.15
   input :high_min_2h, :float, "", 0.3
   input :next_min_2h, :float, "", 0.02
   input :low_multiplier_2h, :float, "", 8
   input :mid_multiplier_2h, :float, "", 0.5
-  input :low_min_4h, :float, "", 0.13
+  input :low_min_4h, :float, "", 0.1
   input :mid_min_4h, :float, "", 0.15
   input :high_min_4h, :float, "", 0.3
   input :next_min_4h, :float, "", 0.02
   input :low_multiplier_4h, :float, "", 10
   input :mid_multiplier_4h, :float, "", 0.50
-  input :low_min_8h, :float, "", 0.13
+  input :low_min_8h, :float, "", 0.1
   input :mid_min_8h, :float, "", 0.15
   input :high_min_8h, :float, "", 0.3
   input :next_min_8h, :float, "", 0.02
   input :low_multiplier_8h, :float, "", 12
   input :mid_multiplier_8h, :float, "", 0.5
-  input :low_min_24h, :float, "", 0.3
-  input :mid_min_24h, :float, "", 0.3
-  input :high_min_24h, :float, "", 0.3
+  input :low_min_24h, :float, "", 0.25
+  input :mid_min_24h, :float, "", 0.25
+  input :high_min_24h, :float, "", 0.25
   input :next_min_24h, :float, "", 0.15
   input :low_multiplier_24h, :float, "", 8
   input :mid_multiplier_24h, :float, "", 0.9
