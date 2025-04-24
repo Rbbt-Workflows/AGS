@@ -15,6 +15,9 @@ module AGS
   #TREATMENTS = %w(DMSO FiveZ INT_FiveZ_PI INT_PD_PI PD PI)
   TREATMENTS = %w(INT_PD_PI INT_FiveZ_PI PI FiveZ PD DMSO)
   TIME_POINTS = [1,2,4,8,24]
+
+  #BONAFIDE_TFS = Rbbt.data["gene_tf_type"].tsv.select("dbTF" => "dbTF").keys
+  BONAFIDE_TFS = Rbbt.data["DNA_binding_and_some_likely_coTFs.13012025"].list
   
   def self.gprofiler
     @gprofiler ||= begin
@@ -245,6 +248,11 @@ module AGS
   end
 
   dep :fold_changes_fc_one
+  task :fold_changes_fc_one_transpose => :tsv do
+    step(:fold_changes_fc_one).load.transpose("Associated Gene Name")
+  end
+
+  dep :fold_changes_fc_one
   dep SaezLab, :regulome
   dep_task :decoupler_pre_fc_one, SaezLab, :decoupler, :matrix => :fold_changes_fc_one, :network => :regulome
 
@@ -278,6 +286,7 @@ require 'AGS/tasks/offset'
 require 'AGS/tasks/timepoint_heatmaps'
 require 'AGS/tasks/downstream_targets'
 require 'AGS/tasks/consistency'
+require 'AGS/tasks/neko_benchmark'
 
 require 'AGS/tasks/enrichment'
 

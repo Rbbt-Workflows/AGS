@@ -95,8 +95,9 @@ module AGS
         current = orig[gene]
         next if current.nil?
         values.to_hash.each do |field,value|
+          value = value.to_f
           next if value == 0
-          if (value > 0) != (current[field] > 0)
+          if (value > 0) != (current[field].to_f > 0)
             current[field] = 0
           end
         end
@@ -111,16 +112,19 @@ module AGS
     end
 
     score.zip(score_points).each do |score_job,score_points|
+      score_points = score_points.to_f
       exclude_tsv = score_job.load
       exclude_tsv.through do |gene,values|
         current = orig[gene]
         next if current.nil?
         values.to_hash.each do |field,value|
+          value = value.to_f
           score = current["Score #{field}"]
+          score = score.to_f
           next if value == 0
           next if current[field].nil?
           next if current[field] == 0
-          if (value > 0) != (current[field] > 0)
+          if (value > 0) != (current[field].to_f > 0)
             score -= score_points
           else
             score += score_points
@@ -134,39 +138,38 @@ module AGS
     orig
   end
 
-
-  dep :treatment_tfs_priority
-  dep :change_offsets
-  task :treatment_tfs_priority_consistency => :tsv do
-    treatment =recursive_inputs[:treatment]
-    changes = step(:change_offsets).load
-    fields = AGS::TIME_POINTS.collect{|t| "Consistent at #{t}h" }
-    consistency = TSV.setup({}, key_field: "Associated Gene Name", fields: fields, type: :list)
-    traverse step(:treatment_tfs_priority), into: consistency do |gene,values|
-      next unless changes.include?(gene)
-
-      gene_changes = changes[gene][treatment]
-      negative_activities = gene_changes.select{|c| c.include?("decrease")}.
-        collect{|c| c.split(" ").last.to_i}.collect{|t| AGS::TIME_POINTS.index(t)}.
-        collect{|i| [i, i+1]}.flatten.reject{|i| i > 5}.uniq.
-        collect{|i| AGS::TIME_POINTS[i] }
-
-      positive_activities = gene_changes.select{|c| c.include?("increase")}.
-        collect{|c| c.split(" ").last.to_i}.collect{|t| AGS::TIME_POINTS.index(t)}.
-        collect{|i| [i, i+1]}.flatten.reject{|i| i > 5}.uniq.
-        collect{|i| AGS::TIME_POINTS[i] }
-
-      
-      res = []
-      AGS::TIME_POINTS.each_with_index do |time_point,i|
-        res << (values[i] > 0 && positive_activities.include?(time_point)) || (values[i] < 0 && negative_activities.include?(time_point))
-      end
-      res = res.collect{|c| c ? 1 : 0 }
-      [gene, res]
+  input :scheme, :select, "Scheme to use: diff, dynamic, non-dynamic", :dynamic, select_options: %w(priority dynamic non-dynamic diff)
+  task_alias :treatment_tfs, AGS, :treatment_tfs_dynamic do |jobname,options|
+    case options[:scheme].to_s
+    when "priority"
+      {task: :treatment_tfs_priority, jobname: jobname, options: options}
+    when "dynamic"
+      {task: :treatment_tfs_dynamic, jobname: jobname, options: options}
+    when "non-dynamic"
+      {task: :treatment_tfs_non_dynamic, jobname: jobname, options: options}
+    when "diff"
+      {task: :treatment_tfs_diff, jobname: jobname, options: options}
     end
-    tsv = step(:treatment_tfs_priority).load.attach consistency
-    tsv.cast = nil
-    tsv
   end
 
+
+  dep :treatment_tfs, scheme: 'dynamic', vetting: :none, data_type: :range, treatment: :placeholder do |jobname,options|
+    jobs = []
+    AGS::TREATMENTS.each do |treatment|
+      %w(ulm).each do |method|
+        jobs << options.merge(treatment: treatment)
+      end
+    end
+    jobs
+  end
+  task :tf_predictions => :tsv do
+    dependencies.inject(nil) do |acc,job|
+      tsv = job.load
+      if acc.nil?
+        acc = tsv
+      else
+        acc.attach tsv, complete: true
+      end
+    end
+  end
 end

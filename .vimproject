@@ -21,29 +21,40 @@ AGS=/$PWD filter="*.rb *.rake Rakefile *.rdoc *.R *.sh *.js *.haml *.sass *.txt 
    INSPEcT=INSPEcT{
     synthesis.rb
    }
+
    decoupler.rb
-   decoupler_old.rb
+
    offset.rb
+
+   consistency.rb
 
    enrichment.rb
 
    excel.rb
 
-   adhoc.rb
-
    timepoint_heatmaps.rb
    downstream_targets.rb
-   consistency.rb
+
+   neko_benchmark.rb
    benchmarks.rb
+
+   adhoc.rb
   }
  }
  test=test {
   test_helper.rb
  }
  data=data filter="*"{
+  5Z_benchmark_020425.tsv
   AGS_dbTFs.list
+  DNA_binding_and_some_likely_coTFs.13012025.list
+  PD_benchmark_020425.tsv
+  PI_benchmark_020425.tsv
   Roma.genes
+  alternative_TF-sets_for_EXTRI1-2-regulomes.tsv
   cluster_groups.tsv
+  coTFs.list
+  consistency_tfs.10022025.list
   dbTFs_expressed_in_AGS.list
   gene_modules.tsv
   gene_tf_type.tsv
@@ -53,7 +64,6 @@ AGS=/$PWD filter="*.rb *.rake Rakefile *.rdoc *.R *.sh *.js *.haml *.sass *.txt 
   noisy_genes.list
   not_expressed.list
   super_cluster_names.tsv
-  coTFs.list
   FC=FC{
    deseq2_log2foldchange_ashrshrink_outliersremoved_untreatedT0asreference_independentfiltering.txt
    deseq2_pvalue_fdradjusted_outliersremoved_untreatedT0asreference_independentfiltering.txt
@@ -84,13 +94,11 @@ AGS=/$PWD filter="*.rb *.rake Rakefile *.rdoc *.R *.sh *.js *.haml *.sass *.txt 
    entity_list=entity_list{
     Gene.haml
     Gene=Gene{
-     heatmap.haml
-     expression.haml
      decoupler.haml
-     decoupler.check
-     decoupler.old
+     expression.haml
+     go_bp.haml
      graph.haml
-     graph.check
+     heatmap.haml
      over_representation.haml
     }
    }

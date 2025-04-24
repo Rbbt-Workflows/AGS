@@ -75,7 +75,7 @@ module AGS
     clean_offsets
   end
 
-  helper :offsets do |fcs, pvalues, inputs|
+  helper :offsets do |fcs, pvalues, inputs,fc_one_threshold=nil|
     fcs_one = [fcs[0]] 
     fcs_two = [0,fcs[0]] 
     fcs_three = [0, 0, fcs[0]] 
@@ -116,17 +116,18 @@ module AGS
       p_three << [pvalues[i], pvalues[i-3]].max
     end
 
-    threshold = 0.05
+    #threshold = 0.05
 
-    s_one = p_one.collect{|v| v.to_f <= threshold }
-    s_two = p_two.collect{|v| v.to_f <= threshold }
-    s_three = p_three.collect{|v| v.to_f <= threshold }
+    #s_one = p_one.collect{|v| v.to_f <= threshold }
+    #s_two = p_two.collect{|v| v.to_f <= threshold }
+    #s_three = p_three.collect{|v| v.to_f <= threshold }
 
     #{{{ UP RULES
 
     increase_offsets = []
     decrease_offsets = []
     AGS::TIME_POINTS.each_with_index do |time_point,i|
+      next if fc_one_threshold && p_one[i] > fc_one_threshold
       fc_current = fcs_one[i]
       fc_next = fcs_one[i+1] || 0
       low_min, mid_min, high_min, next_min, low_multiplier, mid_multiplier = 
@@ -183,12 +184,13 @@ module AGS
   input :next_min_24h, :float, "", 0.15
   input :low_multiplier_24h, :float, "", 8
   input :mid_multiplier_24h, :float, "", 0.9
+  input :fc_one_threshold, :float, 'Threshold for fold-change p-value of one step back (max of individual p-values against 0)', nil
   task :change_offsets => :tsv do |protein_coding, 
     low_min_1h, mid_min_1h, high_min_1h, next_min_1h, low_multiplier_1h, mid_multiplier_1h,
     low_min_2h, mid_min_2h, high_min_2h, next_min_2h, low_multiplier_2h, mid_multiplier_2h, 
     low_min_4h, mid_min_4h, high_min_4h, next_min_4h, low_multiplier_4h, mid_multiplier_4h,
     low_min_8h, mid_min_8h, high_min_8h, next_min_8h, low_multiplier_8h, mid_multiplier_8h,
-    low_min_24h, mid_min_24h, high_min_24h, next_min_24h, low_multiplier_24h, mid_multiplier_24h|
+    low_min_24h, mid_min_24h, high_min_24h, next_min_24h, low_multiplier_24h, mid_multiplier_24h,fc_one_threshold|
 
     if protein_coding
       log :gene_info, "Identifiers"
@@ -220,10 +222,20 @@ module AGS
         fcs = values.values_at *experiment_fields
         pvalues = pvalue_tsv[gene].values_at *experiment_fields
 
-        offsets(fcs, pvalues, self.inputs)
+        offsets(fcs, pvalues, self.inputs,fc_one_threshold)
       end
       [gene, clusters]
     end
   end
 
+  dep :change_offsets
+  task :change_offsets_simplified => :tsv do
+    tsv = step(:change_offsets).load
+    tsv.fields.each do |field|
+      tsv.process field do |values|
+        values.collect{|v| v.sub(/-.*h/,'h') }
+      end
+    end
+    tsv
+  end
 end

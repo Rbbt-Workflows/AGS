@@ -28,7 +28,7 @@
       - AGS::TREATMENTS.each do |treatment|
         - next if treatment == "DMSO"
         - tab.add treatment do
-          - tsv = AGS.job(:treatment_tfs_priority_consistency, page_options.merge(treatment: treatment)).run
+          - tsv = AGS.job(:treatment_tf_consistency, page_options.merge(treatment: treatment)).run
           - tsv.cast = :to_f
           = table do
             - next tsv

@@ -16,6 +16,11 @@ module AGS
 
     tsv.transpose
   end
+  
+  dep :fold_changes_NTNU
+  task :fold_changes_NTNU_tranposed => :tsv do |subset|
+    step(:fold_changes_NTNU).load.transpose("Associated Gene Name")
+  end
 
   input :subset, :array, "Subset to a list of genes"
   task :pvalues_NTNU => :tsv do |subset|

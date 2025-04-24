@@ -1,5 +1,5 @@
 - action_card = ActionCard.new do
-  - input :log_time, :boolean, "Take the log of the time in hours"
+  - input :log_time, :boolean, "Take the log of the time in hours", true
   - input :absolute, :boolean, "Make values absolute"
   - input :show_points, :boolean, "Show individual gene values"
   - input :max, :float, "Limit plot axis", nil
@@ -12,8 +12,13 @@
   - max = 0 unless defined? max
   - max = max.to_f
   - max = nil if max == 0
+
   - tsv = AGS.fold_changes
+  - AGS::TREATMENTS.each do |treatment|
+    - tsv = tsv.add_field "TC_#{treatment}.T0" do
+      - 0.0
   - tsv = tsv.select(list.to(:name))
+
   - melt = TSV.setup({}, "ID~Gene,Experiment,Time,Value")
   - tsv.each do |gene,values|
     - values.zip(tsv.fields).each do |value, field|
@@ -26,7 +31,6 @@
       - id = Misc.digest(values*":")
       - melt[id] = values
 
-  - Log.tsv melt
   - experiments = melt.column("Experiment").values.flatten.uniq
   - time = melt.column("Time").values.flatten.uniq
   - melt_median = TSV.setup({}, "ID~Experiment,Time,Median")
@@ -36,7 +40,22 @@
       - median = Misc.median(values)
       - melt_median[Misc.digest([experiment, time_point] * ":")] = [experiment, time_point, median]
   -#= tool :Rggplot, :plot => "ggplot(data) + geom_smooth(aes(x=Time, y=Value, group=Experiment, color=Experiment,fill=Experiment)) + theme(text = element_text(size = 5))", :data => melt, :size => 5
+  -#= tool :Rggplot, :plot => "ggplot(data, aes(x=Time, y=Median, group=Experiment, color=Experiment)) #{log_time ? " + scale_x_continuous(trans='log2')" : ""} + geom_line() + #{max ? "ylim(-#{max},#{max}) +" : "" } theme(text = element_text(size = 5))", :data => melt_median, :size => 3
+
   = tool :Rggplot, :plot => "ggplot(data, aes(x=Time, y=Value, group=Experiment, color=Experiment)) #{log_time ? " + scale_x_continuous(trans='log2')" : ""} #{show_points ? "+ geom_jitter(size=0.01,aes(width=2),alpha=0.2) " : "" } + geom_smooth(aes(fill=Experiment), method='gam', formula=y ~ s(x, bs = 'cs', k=5)) + #{max ? "ylim(-#{max},#{max}) +" : "" } theme(text = element_text(size = 5))", :data => melt, :size => 3
 
-  -#= tool :Rggplot, :plot => "ggplot(data, aes(x=Time, y=Median, group=Experiment, color=Experiment)) #{log_time ? " + scale_x_continuous(trans='log2')" : ""} + geom_line() + #{max ? "ylim(-#{max},#{max}) +" : "" } theme(text = element_text(size = 5))", :data => melt_median, :size => 3
+  - require 'rbbt/rest/common/tabs'
+  = tabs do |tab|
+    - tab.active "INT_PD_PI"
+    - @step.progress_bar("Processing treatments", max: AGS::TREATMENTS.length) do |bar|
+      - AGS::TREATMENTS.each do |treatment|
+        - next if treatment == "DMSO"
+        - treatment_melt = melt.select("Experiment" => treatment)
+        - tab.add treatment do
+          = tool :Rggplot, :plot => "ggplot(data, aes(x=Time, y=Value)) #{log_time ? " + scale_x_continuous(trans='log2')" : ""} + geom_line(size=0.1,aes(group=Gene, width=2),alpha=0.2) + geom_smooth(aes(fill=Experiment), method='gam', formula=y ~ s(x, bs = 'cs', k=5)) + #{max ? "ylim(-#{max},#{max}) +" : "" } theme(text = element_text(size = 5))", :data => treatment_melt, :size => 3
+          = tool :Rggplot, :plot => "ggplot(data, aes(x=Time, y=Value)) #{log_time ? " + scale_x_continuous(trans='log2')" : ""} + geom_line(size=0.1,aes(group=Gene, width=2),alpha=0.2) + #{max ? "ylim(-#{max},#{max}) +" : "" } theme(text = element_text(size = 5))", :data => treatment_melt, :size => 3
+          = tool :Rggplot, :plot => "ggplot(subset(data, Experiment=='#{treatment}'), aes(x=Time, y=Value, group=Experiment, color=Experiment)) #{log_time ? " + scale_x_continuous(trans='log2')" : ""} #{show_points ? "+ geom_jitter(size=0.01,aes(width=2),alpha=0.2) " : "" } + geom_smooth(aes(fill=Experiment), method='gam', formula=y ~ s(x, bs = 'cs', k=5)) + #{max ? "ylim(-#{max},#{max}) +" : "" } theme(text = element_text(size = 5))", :data => melt, :size => 3
+        - bar.tick
+
+
 

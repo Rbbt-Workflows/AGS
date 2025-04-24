@@ -1,5 +1,3 @@
-
-#require 'AGS/tasks/decoupler_old'
 module AGS
 
   def self.setup_name(treatment, time_point, data_type, synthesis_criteria, synthesis, dynamic, finegrained_degradation)
@@ -37,6 +35,7 @@ module AGS
   input :time_point, :select, "Timepoint", nil, :select_options => TIME_POINTS, :required => true
   input :data_type, :select, "Values to use", :ext_fc, :select_options => %w(fc fc0 ext_fc binary range)
   task :timepoint_matrix => :tsv do |treatment,time_point,data_type|
+    raise ParameterException, "Invalid treatment: #{treatment}" unless TREATMENTS.include?(treatment)
     time_point = time_point.to_i
     sample_name = [treatment, time_point] * "-T"
     matrix = TSV.setup({}, :key_field => "Associated Gene Name", :fields => [sample_name], :type => :single, :cast => :to_f)
@@ -139,22 +138,24 @@ module AGS
         next if values["Strict extended degradation timepoints"].include?([treatment, time_point]*":")
       when 'relaxed_degradation'
         next if values["Relaxed extended degradation timepoints"].include?([treatment, time_point]*":")
+      else
+        raise "Not understood #{vetting}"
       end
 
       name
     end
   end
 
-  input :ExTRI2_regulome, :boolean, "Use ExTRI2 regulome", false
+  input :ExTRI2_regulome, :boolean, "Use ExTRI2 regulome", true
   dep ExTRI2, :regulome, jobname: "Default", 
-    only_authoritative_tfs: true,
+    only_authoritative_tfs: false,
     remove_auto_regulation: false,
     no_MoR: false do |jobname,options|
       if options[:ExTRI2_regulome] 
         Workflow.require_workflow "ExTRI2"
         {workflow: ExTRI2, inputs: options}
       else
-        {inputs: options}
+        {workflow: SaezLab, task: :regulome, inputs: options}
       end
     end
   dep :decoupler_targets, compute: :produce

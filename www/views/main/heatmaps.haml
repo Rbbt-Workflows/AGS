@@ -1,10 +1,10 @@
 - require 'rbbt/util/R'
 
 - default_pvalue = 0.05
-- default_vetting = :degradation
+- default_vetting = :relaxed_degradation
 - default_offsets = true
 - default_synthesis = false
-- default_use_ExTRI2_regulome = false
+- default_use_ExTRI2_regulome = true
 - default_method = :uml
 - action_card = ActionCard.new do
   - input :pvalue_threshold, :float, "Threshold for decoupler p-value", default_pvalue
@@ -21,7 +21,7 @@
 - use_ExTRI2_regulome = default_use_ExTRI2_regulome if use_ExTRI2_regulome.nil?
 - use_ExTRI2_regulome = use_ExTRI2_regulome.to_s != 'false'
 - decoupler_method = nil if decoupler_method.to_s == 'ulm'
-- cpus = decoupler_method.nil? ? 1 : 40
+- cpus = decoupler_method.nil? ? 1 : 8
 - page_options = {vetting: vetting, threshold: pvalue_threshold, ExTRI2_regulome: use_ExTRI2_regulome, method: decoupler_method}
 
 - jobs = AGS::TREATMENTS.collect{|treatment| [AGS.job(:treatment_tfs_non_dynamic, page_options.merge(treatment: treatment)), AGS.job(:treatment_tfs_dynamic, page_options.merge(treatment: treatment)), AGS.job(:treatment_tfs_diff, page_options.merge(treatment: treatment))]}.flatten
@@ -41,7 +41,7 @@
   - AGS::TREATMENTS.each do |treatment|
     - next if treatment == "DMSO"
     - tpfcf  = AGS.job(:treatment_tfs_dynamic, page_options.merge(treatment: treatment)).run
-    - offsets_by_timepoint = offsets_by_timepoint.nil? ? tpfcf : offsets_by_timepoint.attach(tpfcf)
+    - offsets_by_timepoint = offsets_by_timepoint.nil? ? tpfcf : offsets_by_timepoint.attach(tpfcf, complete: true)
 
   - ordered_fields = offsets_by_timepoint.fields.sort_by{|f| AGS::TREATMENTS.index(f.split("-").first) * 0.1  + f.match(/T(\d+)/)[1].to_i }
   - offsets_by_timepoint = offsets_by_timepoint.reorder :key, ordered_fields
@@ -90,6 +90,7 @@
           - data.through do |gene,values|
             - prev = 0
             - values.each_with_index do |v,i|
+              - v = v.to_f
               - if ! v.nil?
                 - if v > 0 && prev <= 0
                   - gene_pos_offsets[gene] ||= []

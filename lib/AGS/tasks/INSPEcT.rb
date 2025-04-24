@@ -138,6 +138,7 @@ module AGS
   dep :fold_changes_NTNU
   dep :change_offsets
   task :full_gene_info => :tsv do
+    Step.wait_for_jobs dependencies
     s = step(:synthesis_changes).load
     d = step(:degradation_changes).load
     f = step(:fold_changes_NTNU).load
@@ -192,7 +193,7 @@ module AGS
       fc
     end
 
-    tsv.add_field "INsPECT gene" do |k,values|
+    tsv.add_field "INSPEcT gene" do |k,values|
       inspect = false
       treatments.each do |treatment|
         inspect = true if values["#{treatment}: geneClass"].any?
@@ -324,14 +325,18 @@ module AGS
       end.flatten
     end
     
+    # In the relaxed setting don't extend to extremes
     extend_degradation = proc do |min,k,values|
       matches = values["Degradation timepoints"]
-      next unless matches.length >= min
+      next unless matches.collect{|m| m.split(":").first }.uniq.length >= min
       new_matches = []
+
       matches.each do |m| 
         treatment, time_point = m.split(":")
         time_index = time_points.index time_point.to_i
         clusters = values[treatment + ": FC clusters"]
+
+        # Get directions of clusters in the same treatment
         directions = clusters.select do |c| 
           cluster_time_index = time_points.index(c.split(" ").last.to_i)
           (cluster_time_index >= time_index - 1) && 
@@ -340,15 +345,32 @@ module AGS
           c.split(" ").first
         end.flatten.uniq 
 
+        # If cluster directions don't agree, skip
         next if directions.length > 1
         direction = directions.first
 
+        # Find clusters in other treatments that could also
+        # be consistent with degradation
         treatments.each do |treatment|
           clusters = values[treatment + ": FC clusters"]
           clusters.each do |c|
+
+            # Only use those that have a change in the same direction
+            # as in the main treatment/timepoint that was identified as
+            # degradation
             next unless c.split(" ").first == direction
             cluster_time_index = time_points.index(c.split(" ").last.to_i)
-            new_matches << [treatment, time_points[cluster_time_index]] * ":"
+
+            # Skip the extremes
+            if cluster_time_index == 5 && time_index <= 2
+              next
+            elsif cluster_time_index == 1 && time_index >= 3
+              next
+            elsif cluster_time_index == 2 && time_index == 5
+              next
+            else
+              new_matches << [treatment, time_points[cluster_time_index]] * ":"
+            end
           end
         end
       end
@@ -394,7 +416,6 @@ module AGS
           match = true if clusters.select{|value| value.include?("decrease") }.collect{|value| time_points.index(value.split(" ").last.to_i) }.include?(time_index - 1)
           match = true if clusters.select{|value| value.include?("decrease") }.collect{|value| time_points.index(value.split(" ").last.to_i) }.include?(time_index + 1)
         end
-
 
         match
       end

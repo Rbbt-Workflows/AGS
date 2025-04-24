@@ -1,5 +1,164 @@
 module AGS
 
+  helper :prev_time_point do |time_point|
+    index = TIME_POINTS.index time_point
+    if index > 0
+      TIME_POINTS[index-1]
+    else
+      "NO TIMEPOINT"
+    end
+  end
+
+  dep :treatment_tfs
+  dep :change_offsets
+  input :bona_fide, :boolean, "Use only bona fide TFs", false
+  task :treatment_tf_consistency => :tsv do |bona_fide|
+    activities = dependencies.first
+    treatment = recursive_inputs[:treatment]
+    changes = step(:change_offsets).load
+    fields = AGS::TIME_POINTS.collect{|t| "Consistent at #{t}h" }
+    consistency = TSV.setup({}, key_field: "Associated Gene Name", fields: fields, type: :list)
+    traverse activities, into: consistency do |gene,values|
+      next unless changes.include?(gene)
+      next if bona_fide and not BONAFIDE_TFS.include?(gene)
+
+      gene_changes = changes[gene][treatment]
+      #negative_activities = gene_changes.select{|c| c.include?("decrease")}.
+      #  collect{|c| c.split(" ").last.to_i}.collect{|t| AGS::TIME_POINTS.index(t)}.
+      #  collect{|i| [i, i+1]}.flatten.reject{|i| i > 5}.uniq.
+      #  collect{|i| AGS::TIME_POINTS[i] }
+
+      #positive_activities = gene_changes.select{|c| c.include?("increase")}.
+      #  collect{|c| c.split(" ").last.to_i}.collect{|t| AGS::TIME_POINTS.index(t)}.
+      #  collect{|i| [i, i+1]}.flatten.reject{|i| i > 5}.uniq.
+      #  collect{|i| AGS::TIME_POINTS[i] }
+
+      negative_changes = gene_changes.select{|c| c.include?("decrease")}.
+        collect{|c| c.split(" ").last.to_i}.collect{|t| AGS::TIME_POINTS.index(t)}
+
+      positive_changes = gene_changes.select{|c| c.include?("increase")}.
+        collect{|c| c.split(" ").last.to_i}.collect{|t| AGS::TIME_POINTS.index(t)}
+
+
+      #res = []
+      #AGS::TIME_POINTS.each_with_index do |time_point,i|
+      #  res << (values[i].to_f > 0 && positive_activities.include?(time_point)) || (values[i].to_f < 0 && negative_activities.include?(time_point))
+      #end
+      #res = res.collect{|c| c ? 1 : 0 }
+
+      res = []
+      AGS::TIME_POINTS.each_with_index do |time_point,i|
+        res << begin
+                 if values[i].to_f > 0
+                   neg = negative_changes.reject{|v| v >= i }.max || -1
+                   pos = positive_changes.reject{|v| v > i }.max || -1
+                   if pos > neg
+                     1
+                   elsif neg == pos
+                     0
+                   else
+                     -1
+                   end
+                   #if positive_activities.include?(time_point)
+                   #  1
+                   #elsif negative_activities.include?(time_point)
+                   #  -1
+                   #end
+                 elsif values[i].to_f < 0
+                   neg = negative_changes.reject{|v| v > i }.max || -1
+                   pos = positive_changes.reject{|v| v >= i }.max || -1
+
+                   if neg > pos
+                     1
+                   elsif neg == pos
+                     0
+                   else
+                     -1
+                   end
+                   #if negative_activities.include?(time_point)
+                   #  1
+                   #elsif positive_activities.include?(time_point)
+                   #  -1
+                   #end
+                 else
+                   nil
+                 end
+        end
+      end
+
+      [gene, res]
+    end
+    tsv = activities.load.attach consistency
+    tsv.cast = nil
+    tsv
+  end
+
+  dep :treatment_tf_consistency, treatment: :placeholder do |jobname,options|
+    AGS::TREATMENTS.collect do |treatment|
+      next if treatment == "DMSO"
+      options.merge(treatment: treatment)
+    end.compact
+  end
+  task :consistency_summary => :float do
+    consistency_tfs = Rbbt.data["consistency_tfs.10022025.list"].list
+    dep_consistency = dependencies.collect do |dep| 
+      tsv = dep.load
+      tsv = tsv.subset(consistency_tfs)
+      fields = tsv.fields.select{|f| f.start_with?("Consistent") } 
+      Misc.mean(fields.collect{|field| Misc.sum(tsv.column(field).values.flatten.compact.reject{|v| v.empty? || v.to_f <= 0 }.map(&:to_f)) }.reject{|v| v.nan? })
+    end
+    Misc.mean(dep_consistency)
+  end
+
+  dep :treatment_tf_consistency, treatment: :placeholder, scheme: :placeholder, vetting: :placeholder do |jobname,options|
+    %w(dynamic non-dynamic diff).collect do |scheme|
+      %w(none degradation relaxed_degradation synthesis).collect do |vetting|
+        AGS::TREATMENTS.collect do |treatment|
+          next if treatment == "DMSO"
+          options.merge(treatment: treatment, scheme: scheme, vetting: vetting)
+        end.compact
+      end
+    end.flatten
+  end
+  task :consistency_sweep => :tsv do
+    dep_consistencies = dependencies.collect do |dep| 
+      tsv = dep.load
+      treatment = dep.recursive_inputs[:treatment]
+      scheme = dep.recursive_inputs[:scheme]
+      vetting = dep.recursive_inputs[:vetting]
+      tsv.fields = tsv.fields.collect{|f|
+        f = treatment + "." + f unless f.include? treatment
+        f = [f, scheme, vetting] * "."
+        f
+      }
+      tsv
+    end
+    dep_consistencies.inject(nil){|acc,tsv| acc = acc.nil? ? tsv : acc.attach(tsv, complete: true) }
+  end
+
+  dep :consistency_sweep
+  task :consistency_counts => :tsv do
+    data = step(:consistency_sweep).load
+    consistency_fields = data.fields.select{|field| field.include? 'Consistent' }
+
+    tsv = TSV.setup({}, "ID~Treatment,Time,Scheme,Vetting,Matches,Miss,Total,Odds")
+    id = 1
+    consistency_fields.each do |field|
+      treatment, title, scheme, vetting = field.split('.')
+      time = title.split(' ').last.to_i
+      counts = Misc.counts(data.column(field).values)
+      matches = counts['1'] || 0
+      miss = counts['-1'] || 0
+      zero = counts['0'] || 0
+      tsv[id] = [treatment, time, scheme, vetting, matches, miss, matches+miss+zero, matches.to_f/miss]
+      id += 1
+    end
+
+    tsv
+  end
+
+
+
   #input :timepoint_suite, :tsv
   #task :consistent => :tsv do |suite|
   #  [true, false].each do |synthesis|
@@ -25,15 +184,6 @@ module AGS
   #  end
   #  Dir.glob(files_dir + "/**")
   #end
-
-  helper :prev_time_point do |time_point|
-    index = TIME_POINTS.index time_point
-    if index > 0
-      TIME_POINTS[index-1]
-    else
-      "NO TIMEPOINT"
-    end
-  end
 
   #dep :timepoint_decoupler_suite
   #dep :change_offsets, :jobname => "Default"
