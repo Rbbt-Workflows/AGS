@@ -12,6 +12,7 @@ AGS=/$PWD filter="*.rb *.rake Rakefile *.rdoc *.R *.sh *.js *.haml *.sass *.txt 
    gene_counts.rb
    gene_clusters.rb
    change_starts.rb
+   tf_type.rb
    gene_clusters=gene_clusters{
     rules.old.rb
     rules.rb
@@ -45,25 +46,8 @@ AGS=/$PWD filter="*.rb *.rake Rakefile *.rdoc *.R *.sh *.js *.haml *.sass *.txt 
   test_helper.rb
  }
  data=data filter="*"{
-  5Z_benchmark_020425.tsv
-  AGS_dbTFs.list
-  DNA_binding_and_some_likely_coTFs.13012025.list
-  PD_benchmark_020425.tsv
-  PI_benchmark_020425.tsv
-  Roma.genes
-  alternative_TF-sets_for_EXTRI1-2-regulomes.tsv
-  cluster_groups.tsv
-  coTFs.list
-  consistency_tfs.10022025.list
-  dbTFs_expressed_in_AGS.list
-  gene_modules.tsv
-  gene_tf_type.tsv
-  good_tfs.list
-  interesting_tfs.list
-  interesting_tfs.list.old
+  EXTRI2-regulome_dbTFs_coTFs_230425.tsv
   noisy_genes.list
-  not_expressed.list
-  super_cluster_names.tsv
   FC=FC{
    deseq2_log2foldchange_ashrshrink_outliersremoved_untreatedT0asreference_independentfiltering.txt
    deseq2_pvalue_fdradjusted_outliersremoved_untreatedT0asreference_independentfiltering.txt

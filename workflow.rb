@@ -17,7 +17,7 @@ module AGS
   TIME_POINTS = [1,2,4,8,24]
 
   #BONAFIDE_TFS = Rbbt.data["gene_tf_type"].tsv.select("dbTF" => "dbTF").keys
-  BONAFIDE_TFS = Rbbt.data["DNA_binding_and_some_likely_coTFs.13012025"].list
+  #BONAFIDE_TFS = Rbbt.data["EXTRI2-regulome_dbTFs_coTFs_230425"].tsv.select("dbTF" => "dbTF").keys
   
   def self.gprofiler
     @gprofiler ||= begin
@@ -278,8 +278,9 @@ end
 
 require 'AGS/tasks/NTNU'
 require 'AGS/tasks/gene_counts'
-require 'AGS/tasks/change_starts'
 require 'AGS/tasks/gene_clusters'
+require 'AGS/tasks/change_starts'
+require 'AGS/tasks/tf_type'
 require 'AGS/tasks/INSPEcT'
 require 'AGS/tasks/decoupler'
 require 'AGS/tasks/offset'

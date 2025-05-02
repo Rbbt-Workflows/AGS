@@ -221,6 +221,7 @@ module AGS
         experiment_fields = AGS::TIME_POINTS.collect{|t| fc_tsv.fields.index("FC_#{experiment}.T#{t}") }
         fcs = values.values_at *experiment_fields
         pvalues = pvalue_tsv[gene].values_at *experiment_fields
+        pvalues = pvalues.collect{|p| p.nil? ? 1 : p }
 
         offsets(fcs, pvalues, self.inputs,fc_one_threshold)
       end

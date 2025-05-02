@@ -11,8 +11,10 @@ module AGS
 
   dep :treatment_tfs
   dep :change_offsets
+  dep :dbTFs
   input :bona_fide, :boolean, "Use only bona fide TFs", false
   task :treatment_tf_consistency => :tsv do |bona_fide|
+    dbTFs = step(:dbTFs).load
     activities = dependencies.first
     treatment = recursive_inputs[:treatment]
     changes = step(:change_offsets).load
@@ -20,7 +22,7 @@ module AGS
     consistency = TSV.setup({}, key_field: "Associated Gene Name", fields: fields, type: :list)
     traverse activities, into: consistency do |gene,values|
       next unless changes.include?(gene)
-      next if bona_fide and not BONAFIDE_TFS.include?(gene)
+      next if bona_fide and not dbTFs.include?(gene)
 
       gene_changes = changes[gene][treatment]
       #negative_activities = gene_changes.select{|c| c.include?("decrease")}.
@@ -111,8 +113,8 @@ module AGS
   end
 
   dep :treatment_tf_consistency, treatment: :placeholder, scheme: :placeholder, vetting: :placeholder do |jobname,options|
-    %w(dynamic non-dynamic diff).collect do |scheme|
-      %w(none degradation relaxed_degradation synthesis).collect do |vetting|
+    %w(dynamic non-dynamic).collect do |scheme|
+      %w(none relaxed_degradation).collect do |vetting|
         AGS::TREATMENTS.collect do |treatment|
           next if treatment == "DMSO"
           options.merge(treatment: treatment, scheme: scheme, vetting: vetting)

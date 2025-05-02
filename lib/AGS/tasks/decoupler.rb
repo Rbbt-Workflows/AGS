@@ -138,6 +138,7 @@ module AGS
         next if values["Strict extended degradation timepoints"].include?([treatment, time_point]*":")
       when 'relaxed_degradation'
         next if values["Relaxed extended degradation timepoints"].include?([treatment, time_point]*":")
+      when 'none'
       else
         raise "Not understood #{vetting}"
       end
@@ -158,11 +159,12 @@ module AGS
         {workflow: SaezLab, task: :regulome, inputs: options}
       end
     end
+  dep :dbTFs
   dep :decoupler_targets, compute: :produce
   dep :expressed_coding_genes
   input :only_dbTF, :boolean, "Use only dbTFs", false
   task :filtered_regulome => :tsv do |only_dbTF|
-    tf_types = Rbbt.data["alternative_TF-sets_for_EXTRI1-2-regulomes.tsv"].tsv
+    dbTFs = step(:dbTFs).load
     targets = step(:decoupler_targets).load
     expressed_coding_genes = step(:expressed_coding_genes).load
     dumper = TSV::Dumper.new step(:regulome).load.options
@@ -171,7 +173,7 @@ module AGS
       tf, tg, weight = values
       next unless targets.include?(tg)
       next unless expressed_coding_genes.include?(tf)
-      next if only_dbTF && ! tf_types[tf] == "dbTF"
+      next if only_dbTF && ! dbTFs.include?(tf)
       [id, [tf, tg, weight]]
     end
   end
