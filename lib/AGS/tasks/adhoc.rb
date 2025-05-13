@@ -106,10 +106,11 @@ rbbt.png.plot("de
     res
   end
 
+  desc "Return a list of the top derregulated transcription factor activities inferred from the gene expression levels of a particular treatment at each of the different timepoints"
   dep :treatment_tfs
-  input :time_point, :string, nil, 1
-  input :direction, :select, nil, :up, select_options: %w(up down)
-  input :max, :integer, nil, 20, select_options: %w(up down)
+  input :time_point, :integer, "Time point", 1, required: true
+  input :direction, :select, "Activity regulation direction, up or down", :up, select_options: %w(up down), required: true
+  input :max, :integer, "Maximum number of top derregulated transcription factors returned", 20
   task :list_tfs => :array do |time_point,direction,max|
     tsv = step(:treatment_tfs).load
     field = tsv.fields.select{|field| field.end_with?("-T#{time_point}") }.first
