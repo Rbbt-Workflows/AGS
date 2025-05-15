@@ -125,5 +125,48 @@ rbbt.png.plot("de
 
     keys[0..max.to_i].collect{|k,v| k }
   end
+
+  dep :list_tfs
+  dep :change_offsets_simplified
+  desc "Return a list of the target genes that are starting to be derragulated in expression, up or down, in a particular treatment at each of the different timepoints"
+  task :list_tgs => :array do
+    time_point, direction, max = self.recursive_inputs.values_at :time_point, :direction, :max
+
+    tfs = step(:list_tfs).load
+    change_offsets = step(:change_offsets).load
+    regulome = step(:regulome).load
+    target_genes = regulome.values_at(*tfs).flatten.uniq
+
+    field = change_offsets.fields.select{|field| field.end_with?("-T#{time_point}") }.first
+
+    case direction.to_s
+    when 'up'
+      tsv = change_offsets.select(field){|v| v.include? 'increase' }
+    when 'down'
+      tsv = change_offsets.select(field){|v| v.include? 'decrease' }
+    end
+
+    tsv.subset(target_genes).keys
+  end
+
+  desc "Return the genes whos expression is regulated by a transcription factor"
+  dep ExTRI2, :regulome, jobname: "Default", 
+    only_authoritative_tfs: false,
+    remove_auto_regulation: false,
+    no_MoR: false do |jobname,options|
+      if options[:ExTRI2_regulome] 
+        Workflow.require_workflow "ExTRI2"
+        {workflow: ExTRI2, inputs: options}
+      else
+        {workflow: SaezLab, task: :regulome, inputs: options}
+      end
+    end
+  input :gene, :string, "Transcription factor"
+  task :tf_targets => :array do |gene|
+    regulome = step(:regulome).path.tsv key_field: "source", fields: ['target'], type: :flat
+    Log.tsv regulome
+    regulome.values_at(gene).flatten.uniq
+  end
+
 end
 

@@ -1,17 +1,40 @@
 AGS=/$PWD filter="*.rb *.rake Rakefile *.rdoc *.R *.sh *.js *.haml *.sass *.txt *.conf" {
  workflow.rb
  chats=chats filter="*"{
-  explanations.rb
-  maboss
-  objective
-  results
-  rick
-  setup
-  simulate.rb
-  interpretation
-  tfs
-  tool
-  tool_ssh
+  .save=.save{
+   explanations
+   explanations.rb
+   interpretation
+   maboss
+   rick
+   simulate.rb
+   tfs
+   tool
+   tool_ssh
+  }
+  system=system{
+   bioinformatician
+   biologist
+  }
+  schemas=schemas{
+   array
+   dictionary
+   json
+  }
+  intro=intro{
+   objective
+   results
+   setup
+  }
+  high_level
+  comparison
+  clean
+  high_level.rb
+  themes=themes{
+  }
+  templates=templates{
+   Explanation
+  }
  }
  bin=bin filter="*"{
  }
