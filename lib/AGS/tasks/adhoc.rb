@@ -128,25 +128,28 @@ rbbt.png.plot("de
 
   dep :list_tfs
   dep :change_offsets_simplified
+  input :tfs, :array, "Restrict genes to targets of these transcription factors", nil
   desc "Return a list of the target genes that are starting to be derragulated in expression, up or down, in a particular treatment at each of the different timepoints"
-  task :list_tgs => :array do
+  task :list_tgs => :array do |tfs|
     time_point, direction, max = self.recursive_inputs.values_at :time_point, :direction, :max
 
-    tfs = step(:list_tfs).load
-    change_offsets = step(:change_offsets).load
-    regulome = step(:regulome).load
-    target_genes = regulome.values_at(*tfs).flatten.uniq
+    tfs  ||= step(:list_tfs).load
+    treatment = recursive_inputs[:treatment]
+    change_offsets = step(:change_offsets_simplified).load
+    regulome = step(:regulome).path.tsv key_field: 'source', fields: ['target'], type: :flat
 
-    field = change_offsets.fields.select{|field| field.end_with?("-T#{time_point}") }.first
+    target_genes = regulome.values_at(*tfs).flatten.uniq
 
     case direction.to_s
     when 'up'
-      tsv = change_offsets.select(field){|v| v.include? 'increase' }
+      tsv = change_offsets.select(treatment){|v| v.include? "increase #{time_point}h" }
     when 'down'
-      tsv = change_offsets.select(field){|v| v.include? 'decrease' }
+      tsv = change_offsets.select(treatment){|v| v.include? "decrease #{time_point}h" }
+    else
+      raise
     end
 
-    tsv.subset(target_genes).keys
+    tsv.subset(target_genes).keys.uniq
   end
 
   desc "Return the genes whos expression is regulated by a transcription factor"
@@ -162,11 +165,53 @@ rbbt.png.plot("de
       end
     end
   input :gene, :string, "Transcription factor"
-  task :tf_targets => :array do |gene|
-    regulome = step(:regulome).path.tsv key_field: "source", fields: ['target'], type: :flat
-    Log.tsv regulome
-    regulome.values_at(gene).flatten.uniq
+  task :tf_targets => :tsv do |gene|
+    regulome = step(:regulome).path.tsv key_field: "source", fields: ['target', 'weight'], type: :double
+    tsv = regulome.subset([gene]).reorder 'target', ['weight'], one2one: true
+    tsv = tsv.add_field "Mode of regulation" do |k,values|
+      values.last.last.to_f < 0 ? "inhibit" : "activate"
+    end
+
+    tsv.reorder('target', ['Mode of regulation']).to_single
   end
+
+  dep :tf_targets
+  dep :list_tgs, direction: "up"
+  dep :list_tgs, direction: "down"
+  task :target_analysis => :tsv do |tfs|
+    targets, up, down = dependencies.collect{|dep| dep.load }
+    targets = targets.to_list
+
+    targets.add_field "Regulated" do |tg,values|
+      if up.include? tg
+        "up"
+      elsif up.include? tg
+        "down"
+      else
+        ""
+      end
+    end
+
+    targets = targets.select("Regulated"){|v| not (v.nil? or v.empty?) }
+
+    targets.add_field "Consistent" do |tg,values|
+      mor, direction = values
+      if mor == 'activate' 
+        if direction == 'up'
+          "consistent"
+        else
+          "inconsistent"
+        end
+      else
+        if direction == 'up'
+          "inconsistent"
+        else
+          "consistent"
+        end
+      end
+    end
+  end
+
 
 end
 
