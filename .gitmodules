@@ -1,0 +1,3 @@
+[submodule "modules/TFe-nekofinder"]
+	path = modules/TFe-nekofinder
+	url = git@github.com:ViviamSB/TFe-nekofinder.git

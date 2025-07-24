@@ -1,39 +1,93 @@
 AGS=/$PWD filter="*.rb *.rake Rakefile *.rdoc *.R *.sh *.js *.haml *.sass *.txt *.conf" {
  workflow.rb
  chats=chats filter="*"{
-  .save=.save{
-   explanations
-   explanations.rb
-   interpretation
-   maboss
-   rick
-   simulate.rb
-   tfs
-   tool
-   tool_ssh
-  }
+  comparison
+  high_level
+  high_level.rb
+  tf_summaries.rb
   system=system{
    bioinformatician
    biologist
-  }
-  schemas=schemas{
-   array
-   dictionary
-   json
   }
   intro=intro{
    objective
    results
    setup
   }
-  high_level
-  comparison
-  clean
-  high_level.rb
   themes=themes{
   }
-  templates=templates{
-   Explanation
+  tf=tf{
+   AHR
+   ATF3
+   ATF4
+   BCL3
+   BCL6
+   CEBPD
+   DDIT3
+   DOT1L
+   ELF4
+   ETV6
+   FOXO1
+   FOXO3
+   FOXO4
+   HBP1
+   IRF8
+   KLF11
+   KLF2
+   KLF6
+   MEF2A
+   MEF2D
+   MLXIPL
+   MTA1
+   MXD1
+   NCOA3
+   NR1H2
+   PPARA
+   PPARD
+   PROX1
+   RARG
+   RXRA
+   SKIL
+   SMAD3
+   SMAD4
+   TET2
+  }
+  tf_tgs=tf_tgs{
+   AHR
+   ATF3
+   ATF4
+   BCL3
+   BCL6
+   CEBPD
+   DDIT3
+   DOT1L
+   ELF4
+   ETV6
+   FOXO1
+   FOXO3
+   FOXO4
+   HBP1
+   IRF8
+   KLF11
+   KLF2
+   KLF6
+   MEF2A
+   MEF2D
+   MLXIPL
+   MTA1
+   MXD1
+   NCOA3
+   NR1H2
+   PPARA
+   PPARD
+   PROX1
+   RARB
+   RARG
+   RXRA
+   SKIL
+   SMAD3
+   SMAD4
+   TET2
   }
  }
  bin=bin filter="*"{
@@ -88,6 +142,25 @@ AGS=/$PWD filter="*.rb *.rake Rakefile *.rdoc *.R *.sh *.js *.haml *.sass *.txt 
    deseq2_log2foldchange_ashrshrink_outliersremoved_untreatedT0asreference_independentfiltering.txt
    deseq2_pvalue_fdradjusted_outliersremoved_untreatedT0asreference_independentfiltering.txt
    samples.txt
+  }
+ }
+ modules=modules filter="*"{
+  TFe-nekofinder=TFe-nekofinder{
+   5Z.py
+   GeneRegulators.csv
+   PD.py
+   PI.py
+   README.md
+   TF_list.csv
+   TFe_Report.docx
+   TFe_bootstrap.py
+   TFe_cluster_bootstrap.slurm
+   TFe_pipeline.py
+   TFe_protocol.ipynb
+   arguments.txt
+   combined_drug_targets.csv
+   net_oncologics.sif
+   signor_filtered.tsv
   }
  }
  www=www{

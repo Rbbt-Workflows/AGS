@@ -102,7 +102,7 @@ module AGS
   dep :vetted_genes, :jobname => "Default"
   input :treatment, :select, "Treatment", nil, :select_options => TREATMENTS, :required => true
   input :time_point, :select, "Timepoint", nil, :select_options => TIME_POINTS, :required => true
-  input :vetting, :select, "Vetting scheme", :degradation, select_options: %w(none synthesis degradation relaxed_degradation) 
+  input :vetting, :select, "Vetting scheme", :none, select_options: %w(none synthesis degradation relaxed_degradation) 
   input :dynamic, :boolean, "Filter for dynamic cluster profiles"
   input :dynamic_subset, :select, "Increase, decrease or both", :both, :select_options => %w(increase decrease both)
   input :target_subset, :array, "Subset of genes to consider" 

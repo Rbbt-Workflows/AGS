@@ -154,7 +154,7 @@ module AGS
   dep :fold_changes, :fc_source => "NTNU"
   dep :pvalues, :fc_source => "NTNU"
   input :protein_coding, :boolean, "Only keep protein coding genes", true
-  input :low_min_1h, :float, "", 0.7
+  input :low_min_1h, :float, "", 0.07
   input :mid_min_1h, :float, "", 0.15
   input :high_min_1h, :float, "", 0.25
   input :next_min_1h, :float, "", 0.02

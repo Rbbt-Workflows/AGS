@@ -13,7 +13,8 @@ module AGS
   dep :change_offsets
   dep :dbTFs
   input :bona_fide, :boolean, "Use only bona fide TFs", false
-  task :treatment_tf_consistency => :tsv do |bona_fide|
+  input :remove_consecutive, :boolean, "Remove consecutive changes", true
+  task :treatment_tf_consistency => :tsv do |bona_fide,remove_consecutive|
     dbTFs = step(:dbTFs).load
     activities = dependencies.first
     treatment = recursive_inputs[:treatment]
@@ -41,6 +42,11 @@ module AGS
       positive_changes = gene_changes.select{|c| c.include?("increase")}.
         collect{|c| c.split(" ").last.to_i}.collect{|t| AGS::TIME_POINTS.index(t)}
 
+      #ask: in ruby, given an array of numbers, remove all the numbers that are consecutive, for instance in 1,3,4,6 remove 4 to get 1,3,6
+      if remove_consecutive
+        negative_changes = negative_changes.uniq.each_with_object([]) {|n, res| res << n unless negative_changes.include?(n-1) && negative_changes.include?(n+1) }
+        positive_changes = positive_changes.uniq.each_with_object([]) {|n, res| res << n unless positive_changes.include?(n-1) && positive_changes.include?(n+1) }
+      end
 
       #res = []
       #AGS::TIME_POINTS.each_with_index do |time_point,i|
@@ -95,6 +101,7 @@ module AGS
     tsv
   end
 
+  dep :dbTFs
   dep :treatment_tf_consistency, treatment: :placeholder do |jobname,options|
     AGS::TREATMENTS.collect do |treatment|
       next if treatment == "DMSO"
@@ -102,8 +109,8 @@ module AGS
     end.compact
   end
   task :consistency_summary => :float do
-    consistency_tfs = Rbbt.data["consistency_tfs.10022025.list"].list
-    dep_consistency = dependencies.collect do |dep| 
+    consistency_tfs = step(:dbTFs).load
+    dep_consistency = dependencies[1..-1].collect do |dep| 
       tsv = dep.load
       tsv = tsv.subset(consistency_tfs)
       fields = tsv.fields.select{|f| f.start_with?("Consistent") } 
@@ -143,7 +150,7 @@ module AGS
     data = step(:consistency_sweep).load
     consistency_fields = data.fields.select{|field| field.include? 'Consistent' }
 
-    tsv = TSV.setup({}, "ID~Treatment,Time,Scheme,Vetting,Matches,Miss,Total,Odds")
+    tsv = TSV.setup({}, "ID~Treatment,Time,Scheme,Vetting,Matches,Miss,Total,Match/Miss Odds,Match/Total Odds")
     id = 1
     consistency_fields.each do |field|
       treatment, title, scheme, vetting = field.split('.')
@@ -152,7 +159,8 @@ module AGS
       matches = counts['1'] || 0
       miss = counts['-1'] || 0
       zero = counts['0'] || 0
-      tsv[id] = [treatment, time, scheme, vetting, matches, miss, matches+miss+zero, matches.to_f/miss]
+      total = matches+miss+zero
+      tsv[id] = [treatment, time, scheme, vetting, matches, miss, total, matches.to_f/miss, matches.to_f/total]
       id += 1
     end
 
