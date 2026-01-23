@@ -31,12 +31,30 @@ module AGS
     tsvs.inject do |acc,tsv| acc.attach tsv, complete: true end
   end
 
-  dep :timepoint_decoupler, time_point: :placeholder, data_type: :fc, dynamic: false do |jobname,options|
+  dep :timepoint_decoupler, time_point: :placeholder, dynamic: false, data_type: :fc do |jobname,options|
     AGS::TIME_POINTS.collect do |time_point,index|
       options.merge({time_point: time_point})
     end
   end
   task :treatment_tfs_non_dynamic => :tsv do
+    tsvs = []
+    AGS::TIME_POINTS.each_with_index do |time_point,index|
+      job = dependencies.select{|d| d.recursive_inputs[:time_point] == time_point }.first
+
+      tsv = job.load
+
+      tsvs << tsv
+    end
+
+    tsvs.inject do |acc,tsv| acc.attach tsv, complete: true end
+  end
+
+  dep :timepoint_decoupler, time_point: :placeholder, dynamic: false, data_type: :fc0 do |jobname,options|
+    AGS::TIME_POINTS.collect do |time_point,index|
+      options.merge({time_point: time_point})
+    end
+  end
+  task :treatment_tfs_fc0 => :tsv do
     tsvs = []
     AGS::TIME_POINTS.each_with_index do |time_point,index|
       job = dependencies.select{|d| d.recursive_inputs[:time_point] == time_point }.first
@@ -138,7 +156,7 @@ module AGS
     orig
   end
 
-  input :scheme, :select, "Scheme to use: diff, dynamic, non-dynamic", :dynamic, select_options: %w(priority dynamic non-dynamic diff)
+  input :scheme, :select, "Scheme to use: diff, dynamic, non-dynamic", :dynamic, select_options: %w(priority dynamic non-dynamic diff fc0)
   task_alias :treatment_tfs, AGS, :treatment_tfs_dynamic do |jobname,options|
     case options[:scheme].to_s
     when "priority"
@@ -149,6 +167,8 @@ module AGS
       {task: :treatment_tfs_non_dynamic, jobname: jobname, options: options}
     when "diff"
       {task: :treatment_tfs_diff, jobname: jobname, options: options}
+    when "fc0"
+      {task: :treatment_tfs_fc0, jobname: jobname, options: options}
     end
   end
 

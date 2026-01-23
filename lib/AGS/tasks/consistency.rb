@@ -42,10 +42,13 @@ module AGS
       positive_changes = gene_changes.select{|c| c.include?("increase")}.
         collect{|c| c.split(" ").last.to_i}.collect{|t| AGS::TIME_POINTS.index(t)}
 
-      #ask: in ruby, given an array of numbers, remove all the numbers that are consecutive, for instance in 1,3,4,6 remove 4 to get 1,3,6
       if remove_consecutive
-        negative_changes = negative_changes.uniq.each_with_object([]) {|n, res| res << n unless negative_changes.include?(n-1) && negative_changes.include?(n+1) }
-        positive_changes = positive_changes.uniq.each_with_object([]) {|n, res| res << n unless positive_changes.include?(n-1) && positive_changes.include?(n+1) }
+        negative_changes = negative_changes.uniq.sort.each_with_object([]) {|n, res| 
+          res << n unless negative_changes.include?(n-1) 
+        }
+        positive_changes = positive_changes.uniq.sort.each_with_object([]) {|n, res| 
+          res << n unless positive_changes.include?(n-1)
+        }
       end
 
       #res = []
@@ -60,34 +63,37 @@ module AGS
                  if values[i].to_f > 0
                    neg = negative_changes.reject{|v| v >= i }.max || -1
                    pos = positive_changes.reject{|v| v > i }.max || -1
+
                    if pos > neg
-                     1
+                     if i >= 4 && pos <= 1
+                       0
+                     elsif i >= 3 && pos == 0
+                       0
+                     else
+                       1
+                     end
                    elsif neg == pos
                      0
                    else
                      -1
                    end
-                   #if positive_activities.include?(time_point)
-                   #  1
-                   #elsif negative_activities.include?(time_point)
-                   #  -1
-                   #end
                  elsif values[i].to_f < 0
                    neg = negative_changes.reject{|v| v > i }.max || -1
                    pos = positive_changes.reject{|v| v >= i }.max || -1
 
                    if neg > pos
-                     1
+                     if i >= 4 && neg <= 1
+                       0
+                     elsif i >= 3 && neg == 0
+                       0
+                     else
+                       1
+                     end
                    elsif neg == pos
                      0
                    else
                      -1
                    end
-                   #if negative_activities.include?(time_point)
-                   #  1
-                   #elsif positive_activities.include?(time_point)
-                   #  -1
-                   #end
                  else
                    nil
                  end
@@ -120,7 +126,7 @@ module AGS
   end
 
   dep :treatment_tf_consistency, treatment: :placeholder, scheme: :placeholder, vetting: :placeholder do |jobname,options|
-    %w(dynamic non-dynamic).collect do |scheme|
+    %w(dynamic non-dynamic fc0).collect do |scheme|
       %w(none relaxed_degradation).collect do |vetting|
         AGS::TREATMENTS.collect do |treatment|
           next if treatment == "DMSO"

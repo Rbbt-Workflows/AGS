@@ -152,18 +152,7 @@ rbbt.png.plot("de
     tsv.subset(target_genes).keys.uniq
   end
 
-  desc "Return the genes whos expression is regulated by a transcription factor"
-  dep ExTRI2, :regulome, jobname: "Default", 
-    only_authoritative_tfs: false,
-    remove_auto_regulation: false,
-    no_MoR: false do |jobname,options|
-      if options[:ExTRI2_regulome] 
-        Workflow.require_workflow "ExTRI2"
-        {workflow: ExTRI2, inputs: options}
-      else
-        {workflow: SaezLab, task: :regulome, inputs: options}
-      end
-    end
+  dep :regulome
   input :gene, :string, "Transcription factor"
   task :tf_targets => :tsv do |gene|
     regulome = step(:regulome).path.tsv key_field: "source", fields: ['target', 'weight'], type: :double
@@ -212,6 +201,68 @@ rbbt.png.plot("de
     end
   end
 
+  dep :change_offsets_simplified
+  task :gprofiler_queries => :string do
+    change_offsets = step(:change_offsets_simplified).load
+    AGS::TIME_POINTS.each do |timepoint|
+      AGS::TREATMENTS.each do |treatment|
+        up_cluster = change_offsets.select(treatment => "increase #{timepoint}h").keys
+        down_cluster = change_offsets.select(treatment => "decrease #{timepoint}h").keys
+
+        tsv = AGS.job(:timepoint_matrix, treatment: treatment, time_point: timepoint, data_type: :fc).run.transpose
+        fc_up_03 = tsv.select do |k,values|
+          values.flatten.first.to_f > 0.3
+        end.keys
+        fc_down_03 = tsv.select do |k,values|
+          values.flatten.first.to_f < -0.3
+        end.keys
+
+        fc_up_07 = tsv.select do |k,values|
+          values.flatten.first.to_f > 0.7
+        end.keys
+        fc_down_07 = tsv.select do |k,values|
+          values.flatten.first.to_f < -0.7
+        end.keys
+
+
+        tsv = AGS.job(:timepoint_matrix, treatment: treatment, time_point: timepoint, data_type: :fc0).run.transpose
+        fc0_up_03 = tsv.select do |k,values|
+          values.flatten.first.to_f > 0.3
+        end.keys
+        fc0_down_03 = tsv.select do |k,values|
+          values.flatten.first.to_f < -0.3
+        end.keys
+
+        fc0_up_07 = tsv.select do |k,values|
+          values.flatten.first.to_f > 0.7
+        end.keys
+        fc0_down_07 = tsv.select do |k,values|
+          values.flatten.first.to_f < -0.7
+        end.keys
+
+        [
+          [up_cluster, 'cluster', 'up'],
+          [down_cluster, 'cluster', 'down'],
+          [fc_up_03, 'fc_03', 'up'],
+          [fc_down_03, 'fc_03', 'down'],
+          [fc_up_07, 'fc_07', 'up'],
+          [fc_down_07, 'fc_07', 'down'],
+          [fc0_up_03, 'fc0_03', 'up'],
+          [fc0_down_03, 'fc0_03', 'down'],
+          [fc0_up_07, 'fc0_07', 'up'],
+          [fc0_down_07, 'fc0_07', 'down'],
+        ].each do |list,type,direction|
+
+          name = [treatment, timepoint, type, direction] * "_"
+          file(name + '.txt').write <<-EOF
+>#{name}
+#{up_cluster*"\n"}
+          EOF
+        end
+      end
+    end
+    'DONE'
+  end
 
 end
 

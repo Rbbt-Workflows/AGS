@@ -8,7 +8,7 @@ module AGS
   TREATMENT_TARGETS["INT_FiveZ_PI"] = TREATMENT_TARGETS["FiveZ"] + TREATMENT_TARGETS["PI"]
   TREATMENT_TARGETS["INT_PD_PI"] = TREATMENT_TARGETS["PD"] + TREATMENT_TARGETS["PI"]
 
-  dep SaezLab, :regulome, :jobname => "Default"
+  dep :regulome
   input :steps_max, :integer, "Max steps", 3
   task :downstream_targets => :yaml do |steps|
 

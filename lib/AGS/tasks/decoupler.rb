@@ -147,18 +147,7 @@ module AGS
     end
   end
 
-  input :ExTRI2_regulome, :boolean, "Use ExTRI2 regulome", true
-  dep ExTRI2, :regulome, jobname: "Default", 
-    only_authoritative_tfs: false,
-    remove_auto_regulation: false,
-    no_MoR: false do |jobname,options|
-      if options[:ExTRI2_regulome] 
-        Workflow.require_workflow "ExTRI2"
-        {workflow: ExTRI2, inputs: options}
-      else
-        {workflow: SaezLab, task: :regulome, inputs: options}
-      end
-    end
+  dep :regulome
   dep :dbTFs
   dep :decoupler_targets, compute: :produce
   dep :expressed_coding_genes

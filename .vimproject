@@ -1,6 +1,9 @@
 AGS=/$PWD filter="*.rb *.rake Rakefile *.rdoc *.R *.sh *.js *.haml *.sass *.txt *.conf" {
  workflow.rb
  chats=chats filter="*"{
+
+  sequence
+
   comparison
   high_level
   high_level.rb
@@ -113,6 +116,8 @@ AGS=/$PWD filter="*.rb *.rake Rakefile *.rdoc *.R *.sh *.js *.haml *.sass *.txt 
     synthesis.rb
    }
 
+   regulome.rb
+
    decoupler.rb
 
    offset.rb
@@ -130,6 +135,10 @@ AGS=/$PWD filter="*.rb *.rake Rakefile *.rdoc *.R *.sh *.js *.haml *.sass *.txt 
    benchmarks.rb
 
    adhoc.rb
+
+   sequence.rb
+
+   rule_variants.rb
   }
  }
  test=test {
@@ -146,10 +155,7 @@ AGS=/$PWD filter="*.rb *.rake Rakefile *.rdoc *.R *.sh *.js *.haml *.sass *.txt 
  }
  modules=modules filter="*"{
   TFe-nekofinder=TFe-nekofinder{
-   5Z.py
    GeneRegulators.csv
-   PD.py
-   PI.py
    README.md
    TF_list.csv
    TFe_Report.docx

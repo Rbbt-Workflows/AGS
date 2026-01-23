@@ -154,9 +154,12 @@ module AGS
       :fields => ["Associated Gene Name"], 
       :order => true, 
       :persist => true
+
     s.add_field "Ensembl Gene ID" do |n|
       index[n]
     end
+
+    index.close
 
     #s = s.subset(Rbbt.data["Roma.genes"].list)
 

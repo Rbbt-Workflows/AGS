@@ -282,6 +282,7 @@ require 'AGS/tasks/gene_clusters'
 require 'AGS/tasks/change_starts'
 require 'AGS/tasks/tf_type'
 require 'AGS/tasks/INSPEcT'
+require 'AGS/tasks/regulome'
 require 'AGS/tasks/decoupler'
 require 'AGS/tasks/offset'
 require 'AGS/tasks/timepoint_heatmaps'
@@ -294,6 +295,10 @@ require 'AGS/tasks/enrichment'
 require 'AGS/tasks/excel'
 
 require 'AGS/tasks/adhoc'
+
+require 'AGS/tasks/sequence'
+
+require 'AGS/tasks/rule_variants'
 
 #require 'AGS/tasks/benchmarks'
 require 'knowledge_base/AGS'
