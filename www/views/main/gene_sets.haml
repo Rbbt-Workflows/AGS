@@ -1,0 +1,43 @@
+- default_expressed_background = false
+- default_remove_good_tfs = false
+- action_card = ActionCard.new do
+  - input :expressed_background, :boolean, "Limit background genes to expressed in AGS", default_expressed_background
+  - input :remove_good_tfs, :boolean, "Don't use TFs as TGs", default_remove_good_tfs
+
+- expressed_background = default_expressed_background unless defined? expressed_background
+- remove_good_tfs = remove_good_tfs unless defined? remove_good_tfs
+= action_card_render action_card do
+  - change_offsets = AGS.job(:change_offsets).run
+  - tfs = remove_good_tfs ? Rbbt.data.good_tfs.list : []
+  - background = AGS.job(:expressed_coding_genes).run - tfs
+  - background = [] unless expressed_background
+
+  - require 'rbbt/rest/common/tabs'
+  = tabs do |t|
+    - t.active "INT_PD_PI"
+    - @step.traverse AGS::TREATMENTS, bar: "Treatments" do |treatment|
+      - t.add treatment do
+        - header "p_value", "NumericValue"
+        = table table_id: "#{treatment} multiple" do
+          - queries = {}
+          - AGS::TIME_POINTS.each do |time_point|
+            - increase = change_offsets.select(treatment => /increase #{time_point}(h|-)/).keys - tfs
+            - decrease = change_offsets.select(treatment => /decrease #{time_point}(h|-)/).keys - tfs
+            - queries[[treatment, time_point, "increase"] * "_"] = increase unless increase.empty?
+            - queries[[treatment, time_point, "decrease"] * "_"] = decrease unless decrease.empty?
+            - queries[[treatment, time_point, "both"] * "_"] = decrease + increase unless increase.empty? && decrease.empty?
+
+          - next if queries.empty?
+          - next AGS.job(:gprofiler_multiple, queries: queries, background: background).run
+
+        - @step.traverse AGS::TIME_POINTS, bar: "Timepoints" do |time_point|
+          - increase = change_offsets.select(treatment => /increase #{time_point}(h|-)/).keys - tfs
+          - decrease = change_offsets.select(treatment => /decrease #{time_point}(h|-)/).keys - tfs
+
+          %h3 Increase #{time_point}h
+          = table table_id: "#{treatment} #{time_point} increase" do
+            - next AGS.job(:gprofiler, list: increase, background: background).run
+
+          %h3 Decrease #{time_point}h
+          = table table_id: "#{treatment} #{time_point} decrease" do
+            - next AGS.job(:gprofiler, list: decrease, background: background).run

@@ -1,0 +1,4 @@
+%h3 Uses expressed coding genes as background
+= table :page => "1~p-value" do
+  - background = AGS.job(:expressed_coding_genes).run
+  - next AGS.job(:gprofiler, list: list, background: background).run

@@ -274,6 +274,8 @@ module AGS
     end
     new
   end
+
+  export :list_tfs, :list_tgs, :tf_targets
 end
 
 require 'AGS/tasks/NTNU'
@@ -299,6 +301,8 @@ require 'AGS/tasks/adhoc'
 require 'AGS/tasks/sequence'
 
 require 'AGS/tasks/rule_variants'
+
+require 'AGS/tasks/mcp'
 
 #require 'AGS/tasks/benchmarks'
 require 'knowledge_base/AGS'

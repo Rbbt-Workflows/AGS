@@ -18,7 +18,6 @@ module AGS
   task :coTF_plot => :binary do
     data = step(:coTF_sign).load
     data.R <<-EOF
-rbbt.png.plot("de
     EOF
   end
 
@@ -110,7 +109,7 @@ rbbt.png.plot("de
   dep :treatment_tfs
   input :time_point, :integer, "Time point", 1, required: true
   input :direction, :select, "Activity regulation direction, up or down", :up, select_options: %w(up down), required: true
-  input :max, :integer, "Maximum number of top derregulated transcription factors returned", 20
+  input :max, :integer, "Maximum number of top derregulated transcription factors returned", 100
   task :list_tfs => :array do |time_point,direction,max|
     tsv = step(:treatment_tfs).load
     field = tsv.fields.select{|field| field.end_with?("-T#{time_point}") }.first

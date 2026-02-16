@@ -1,0 +1,59 @@
+- default_expressed_background = false
+- default_remove_good_tfs = false
+- action_card = ActionCard.new do
+  - input :expressed_background, :boolean, "Limit background genes to expressed in AGS", default_expressed_background
+  - input :remove_good_tfs, :boolean, "Don't use TFs as TGs", default_remove_good_tfs
+- expressed_background = default_expressed_background unless defined? expressed_background
+- remove_good_tfs = remove_good_tfs unless defined? remove_good_tfs
+
+= action_card_render action_card do
+  - change_offsets = AGS.job(:change_offsets).run
+  - tfs = Rbbt.data.good_tfs.list
+  - background = AGS.job(:expressed_coding_genes).run - tfs
+  - background = [] unless expressed_background
+
+  - queries = {}
+  - @step.traverse AGS::TREATMENTS, bar: "Treatments" do |treatment|
+    - AGS::TIME_POINTS.each do |time_point|
+      - increase = change_offsets.select(treatment => /increase #{time_point}(h|-)/).keys
+      - decrease = change_offsets.select(treatment => /decrease #{time_point}(h|-)/).keys
+      - if remove_good_tfs
+        - increase = increase - tfs
+        - decrease = decrease - tfs
+      - queries[[treatment, time_point, "increase"] * "_"] = increase
+      - queries[[treatment, time_point, "decrease"] * "_"] = decrease
+      - queries[[treatment, time_point, "both"] * "_"] = decrease + increase
+
+  - require 'rbbt/rest/common/tabs'
+  = tabs do |t|
+    - t.active queries.keys.first
+    - queries.each do |key,values|
+      - t.add key do
+        %ul
+          - values.each do |value|
+            %li= value
+    
+-#
+  - tsv = AGS.job(:gprofiler_multiple, queries: queries, background: background).run
+  - tsv = tsv.to_list
+
+  - fields = %w(source name term_size) 
+  - AGS::TIME_POINTS.each do |time_point|
+    - ["increase", "decrease", 'both'].each do |direction|
+      - AGS::TREATMENTS.each do |treatment|
+        - fields << [treatment, time_point, direction] * "_"
+
+  - fields << %w(description) 
+  - result = TSV.setup({}, fields: fields, type: :list)
+  - tsv.through do |id,values|
+    - source, native, name, term_size, description, query, p_value = values.values_at "source", "native", "name", "term_size", "description", "query", "p-value"
+    - v = result[native] ||= NamedArray.setup([1] * fields.length, fields)
+    - v["source"] = source
+    - v["name"] = name
+    - v["term_size"] = term_size
+    - v["description"] = description
+    - v[query] = p_value
+    - result[native] = v
+  = table do
+    - next result
+

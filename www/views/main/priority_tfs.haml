@@ -1,0 +1,37 @@
+- default_pvalue = 0.05
+- default_vetting = :degradation
+- default_offsets = true
+- default_synthesis = false
+- default_use_ExTRI2_regulome = false
+- default_method = :ulm
+- action_card = ActionCard.new do
+  - input :pvalue_threshold, :float, "Threshold for decoupler p-value", default_pvalue
+  - input :vetting, :select, "Vetting scheme", default_vetting, select_options: %w(none synthesis degradation relaxed_degradation) 
+  - input :use_ExTRI2_regulome, :boolean, "Use ExTRI2 regulomer", default_use_ExTRI2_regulome
+  - input :method, :select, "Decoupler method to use", default_method, select_options: %w(ulm mlm combined)
+
+- pvalue_threshold = default_pvalue if pvalue_threshold.nil?
+- pvalue_threshold = pvalue_threshold.to_f
+- vetting = default_vetting if vetting.nil?
+- use_ExTRI2_regulome = default_use_ExTRI2_regulome if use_ExTRI2_regulome.nil?
+- use_ExTRI2_regulome = use_ExTRI2_regulome.to_s != 'false'
+- method = nil if method.to_s == 'ulm'
+- cpus = method.nil? ? 1 : 4
+- page_options = {vetting: vetting, threshold: pvalue_threshold, ExTRI2_regulome: use_ExTRI2_regulome, method: method}
+- jobs = AGS::TREATMENTS.collect{|treatment| AGS.job(:treatment_tfs_priority_consistency, page_options.merge(treatment: treatment))}.flatten
+- rules = {SaezLab: {decoupler: {resources: {cpus: cpus}}}}
+- Workflow::Orchestrator.process(rules, jobs) if jobs.reject{|job| job.done? }.any?
+
+= action_card_render action_card do
+
+  - require 'rbbt/rest/common/tabs'
+  = tabs do |tab|
+    - tab.active "INT_PD_PI"
+    - @step.progress_bar("Processing treatments", max: AGS::TREATMENTS.length) do |bar|
+      - AGS::TREATMENTS.each do |treatment|
+        - next if treatment == "DMSO"
+        - tab.add treatment do
+          - tsv = AGS.job(:treatment_tfs_priority_consistency, nil, page_options.merge(treatment: treatment)).run
+          - tsv.cast = :to_f
+          = table do
+            - next tsv
