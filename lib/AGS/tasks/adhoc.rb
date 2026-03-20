@@ -107,8 +107,8 @@ module AGS
 
   desc "Return a list of the top derregulated transcription factor activities inferred from the gene expression levels of a particular treatment at each of the different timepoints"
   dep :treatment_tfs
-  input :time_point, :integer, "Time point", 1, required: true
-  input :direction, :select, "Activity regulation direction, up or down", :up, select_options: %w(up down), required: true
+  input :time_point, :integer, "Time point", nil, required: true
+  input :direction, :select, "Activity regulation direction, up or down", nil, select_options: %w(up down), required: true
   input :max, :integer, "Maximum number of top derregulated transcription factors returned", 100
   task :list_tfs => :array do |time_point,direction,max|
     tsv = step(:treatment_tfs).load
