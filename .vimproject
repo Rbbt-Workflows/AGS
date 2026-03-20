@@ -2,9 +2,12 @@ AGS=/$PWD filter="*.rb *.rake Rakefile *.rdoc *.R *.sh *.js *.haml *.sass *.txt 
  workflow.rb
  chats=chats filter="*"{
 
-
   explanation_new
+
+  explanation_vllm
+
   fiveZ_PI
+
   hallmark_table
   molecular_mechanisms
   all_molecular_mechanisms.rb
@@ -12,8 +15,20 @@ AGS=/$PWD filter="*.rb *.rake Rakefile *.rdoc *.R *.sh *.js *.haml *.sass *.txt 
   synthesis
 
   molecular_validation
-  network_construction
+  network_construction_v2
   network_construction_vllm
+
+  plan
+
+  explanaion_vllm
+
+  run_plan
+
+  judge_network
+
+
+
+  fatima
 
   model
 
@@ -43,9 +58,9 @@ AGS=/$PWD filter="*.rb *.rake Rakefile *.rdoc *.R *.sh *.js *.haml *.sass *.txt 
    biologist
   }
   intro=intro{
+   setup
    objective
    results
-   setup
   }
   themes=themes{
   }
