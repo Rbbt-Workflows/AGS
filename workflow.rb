@@ -304,6 +304,8 @@ require 'AGS/tasks/rule_variants'
 
 require 'AGS/tasks/mcp'
 
+require 'AGS/tasks/freeze'
+
 #require 'AGS/tasks/benchmarks'
 require 'knowledge_base/AGS'
 #require 'rbbt/entity/AGS'
