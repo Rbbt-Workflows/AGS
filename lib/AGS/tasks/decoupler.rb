@@ -148,12 +148,12 @@ module AGS
   end
 
   dep :regulome
-  dep :dbTFs
+  dep :valid_TFs
   dep :decoupler_targets, compute: :produce
   dep :expressed_coding_genes
-  input :only_dbTF, :boolean, "Use only dbTFs", false
-  task :filtered_regulome => :tsv do |only_dbTF|
-    dbTFs = step(:dbTFs).load
+  input :only_valid_TFs, :boolean, "Use only valid TFs (dbTFs and some coTFs)", true
+  task :filtered_regulome => :tsv do |only_valid_TFs|
+    valid_TFs = step(:valid_TFs).load
     targets = step(:decoupler_targets).load
     expressed_coding_genes = step(:expressed_coding_genes).load
     dumper = TSV::Dumper.new step(:regulome).load.options
@@ -162,7 +162,7 @@ module AGS
       tf, tg, weight = values
       next unless targets.include?(tg)
       next unless expressed_coding_genes.include?(tf)
-      next if only_dbTF && ! dbTFs.include?(tf)
+      next if only_valid_TFs && ! valid_TFs.include?(tf)
       [id, [tf, tg, weight]]
     end
   end

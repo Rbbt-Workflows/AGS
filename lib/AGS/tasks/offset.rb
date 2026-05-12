@@ -173,7 +173,7 @@ module AGS
   end
 
 
-  dep :treatment_tfs, scheme: 'dynamic', vetting: :none, data_type: :range, treatment: :placeholder do |jobname,options|
+  dep :treatment_tfs, vetting: :none, data_type: :range, treatment: :placeholder do |jobname,options|
     jobs = []
     AGS::TREATMENTS.each do |treatment|
       %w(ulm).each do |method|

@@ -136,6 +136,7 @@ module AGS
   dep :synthesis_changes
   dep :degradation_changes
   dep :fold_changes_NTNU
+  dep :pvalues_NTNU
   dep :change_offsets
   task :full_gene_info => :tsv do
     Step.wait_for_jobs dependencies
@@ -168,6 +169,11 @@ module AGS
     clusters.fields = clusters.fields.collect{|f| [f, " FC clusters"] * ":" }
     tsv = s.attach clusters
 
+    noisy_genes = Rbbt.data.noisy_genes.list
+
+    tsv.delete_if do |gene,v|
+      noisy_genes.include?(gene)
+    end
 
     log :gene_info, "Identifiers"
     gene_info = Organism.identifiers(AGS.organism).tsv(:key_field => "Associated Gene Name", :fields => ["Ensembl Gene ID"], :type => :double)

@@ -1,6 +1,34 @@
 AGS=/$PWD filter="*.rb *.rake Rakefile *.rdoc *.R *.sh *.js *.haml *.sass *.txt *.conf" {
  workflow.rb
  chats=chats filter="*"{
+  paper=paper{
+   AGS_methods_from_code.md
+   astrid_draft_2403026.md
+   glm
+   methodology
+   methods
+   paper
+  }
+
+  methodology
+
+  pd_pi
+  fivez_pi
+
+  learnings
+
+  mechanistic
+
+  main_findings
+
+  compare_with_fc0
+
+  predictive
+
+  for_paper
+
+
+
 
   explanation_new
 
@@ -186,6 +214,8 @@ AGS=/$PWD filter="*.rb *.rake Rakefile *.rdoc *.R *.sh *.js *.haml *.sass *.txt 
    rule_variants.rb
 
    mcp.rb
+
+   freeze.rb
   }
  }
  test=test {

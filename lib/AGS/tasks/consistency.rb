@@ -11,11 +11,11 @@ module AGS
 
   dep :treatment_tfs
   dep :change_offsets
-  dep :dbTFs
+  dep :valid_TFs
   input :bona_fide, :boolean, "Use only bona fide TFs", false
   input :remove_consecutive, :boolean, "Remove consecutive changes", true
   task :treatment_tf_consistency => :tsv do |bona_fide,remove_consecutive|
-    dbTFs = step(:dbTFs).load
+    dbTFs = step(:valid_TFs).load
     activities = dependencies.first
     treatment = recursive_inputs[:treatment]
     changes = step(:change_offsets).load
