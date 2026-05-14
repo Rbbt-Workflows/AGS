@@ -144,12 +144,16 @@ module AGS
     d = step(:degradation_changes).load
     f = step(:fold_changes_NTNU).load
     f = f.transpose("Associated Gene Name")
+    p = step(:pvalues_NTNU).load
+    p = p.transpose("Associated Gene Name")
+    p.fields = p.fields.collect{|f| f.sub(/^FC_/, 'Pvalue_') }
 
     s = s.change_key "Associated Gene Name", identifiers: Organism.identifiers(AGS.organism)
     d = d.change_key "Associated Gene Name", identifiers: Organism.identifiers(AGS.organism)
 
     s.attach d, :identifiers => Organism.identifiers(AGS.organism), complete: true
     s.attach f, :identifiers => Organism.identifiers(AGS.organism), complete: true
+    s.attach p, :identifiers => Organism.identifiers(AGS.organism), complete: true
 
     index = Organism.identifiers(AGS.organism).index :target => "Ensembl Gene ID", 
       :fields => ["Associated Gene Name"], 
