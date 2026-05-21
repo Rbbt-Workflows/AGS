@@ -1,63 +1,15 @@
 
 module AGS
-  #dep :treatment_tfs do 
-  #  TREATMENTS.collect{|t| {treatment: t} }
-  #end
-  #dep :treatment_tfs, vetting: :synthesis do 
-  #  TREATMENTS.collect{|t| {treatment: t} }
-  #end
-  #dep :treatment_tfs, vetting: :degradation do 
-  #  TREATMENTS.collect{|t| {treatment: t} }
-  #end
-  #dep :treatment_tfs, vetting: :relaxed_degradation do 
-  #  TREATMENTS.collect{|t| {treatment: t} }
-  #end
-  #dep :treatment_tfs, low_min_24h:  1, mid_min_24h: 1, high_min_24h: 1, next_min_24h: 1 do 
-  #  TREATMENTS.collect{|t| {treatment: t} }
-  #end
-  #dep :treatment_tfs, low_min_24h:  0.5, mid_min_24h: 0.5, high_min_24h: 0.5, next_min_24h: 0.5 do 
-  #  TREATMENTS.collect{|t| {treatment: t} }
-  #end
-  #dep :treatment_tfs_diff do 
-  #  TREATMENTS.collect{|t| {treatment: t} }
-  #end
-  #dep :treatment_tfs_non_dynamic do 
-  #  TREATMENTS.collect{|t| {treatment: t} }
-  #end
-  #dep :treatment_tfs_fc0 do 
-  #  TREATMENTS.collect{|t| {treatment: t} }
-  #end
-  #dep :list_tfs do
-  #  jobs = []
-  #  TREATMENTS.each do |treatment|
-  #    TIME_POINTS.each do |time_point|
-  #      %w(up down).each do |direction|
-  #        jobs << {treatment: treatment, time_point: time_point, direction: direction}
-  #      end
-  #    end
-  #  end
-  #  jobs
-  #end
-  #dep :list_tfs do
-  #  jobs = []
-  #  TREATMENTS.each do |treatment|
-  #    time_point = 24
-  #    %w(up down).each do |direction|
-  #      [0.5, 1].each do |threshold|
-  #        jobs << {
-  #          treatment: treatment, time_point: time_point, direction: direction,
-  #          low_min_24h:  threshold, mid_min_24h: threshold, high_min_24h: threshold, next_min_24h: threshold
-  #        }
-  #      end
-  #    end
-  #  end
-  #  jobs
-  #end
   dep :regulome
   dep :full_gene_info
   dep :full_gene_info, low_min_24h:  1, mid_min_24h: 1, high_min_24h: 1, next_min_24h: 1 
   dep :full_gene_info, low_min_24h:  0.5, mid_min_24h: 0.5, high_min_24h: 0.5, next_min_24h: 0.5
   dep :treatment_tf_consistency do
+    TREATMENTS.collect do |treatment|
+      {treatment: treatment}
+    end
+  end
+  dep :sequence_with_changes do
     TREATMENTS.collect do |treatment|
       {treatment: treatment}
     end
@@ -70,7 +22,8 @@ module AGS
     end
   end
   dep :tf_predictions, scheme: :placeholder do |jobname,options|
-    %w(dynamic non-dynamic fc0 diff).collect do |scheme|
+    IndiferentHash.setup(options)
+    jobs = %w(dynamic non-dynamic fc0 diff).collect do |scheme|
       if scheme == 'dynamic'
         [
           options.merge({scheme: scheme}),
@@ -81,12 +34,16 @@ module AGS
         options.merge({scheme: scheme})
       end
     end.flatten
+    jobs
   end
   dep :valid_TFs
+  dep :gprofiler_suite
   task :freeze => :array do
     dependencies.each do |dep|
       other = dependencies.select{|d| d.task_name == dep.task_name }.length > 1
       filename = case dep.task_name
+                 when :gprofiler_suite
+                   Open.cp dep.files_dir, file("gprofiler")
                  when :valid_TFs
                    'valid_TFs.list'
                  when :list_tfs

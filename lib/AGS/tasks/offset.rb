@@ -18,9 +18,13 @@ module AGS
 
       if previous_job
         previous_tsv = previous_job.load
-        tsv.fields do |field|
-          tsv.process field do |k,v|
-            v.to_f - previous_tsv[k][field].to_f
+        tsv.fields.each do |field|
+          tsv.process field do |v,k|
+            if previous_tsv[k]
+              v.to_f - previous_tsv[k].first.to_f
+            else
+              v
+            end
           end
         end
       end

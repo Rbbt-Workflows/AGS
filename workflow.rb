@@ -306,6 +306,8 @@ require 'AGS/tasks/mcp'
 
 require 'AGS/tasks/freeze'
 
+require 'AGS/tasks/figures'
+
 #require 'AGS/tasks/benchmarks'
 require 'knowledge_base/AGS'
 #require 'rbbt/entity/AGS'
