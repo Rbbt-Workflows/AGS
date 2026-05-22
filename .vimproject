@@ -1,86 +1,30 @@
 AGS=/$PWD filter="*.rb *.rake Rakefile *.rdoc *.R *.sh *.js *.haml *.sass *.txt *.conf" {
  workflow.rb
  chats=chats filter="*"{
+  freeze=freeze{
+   compare.rb
+  }
   paper=paper{
    AGS_methods_from_code.md
    astrid_draft_2403026.md
    glm
-   methodology
    methods
    paper
+
+   methodology
+   AI_interpretation
+   results
+
+   thursday_meeting.txt
+
+   results_section
+   results_section_v2
   }
 
-  methodology
+  results=results{
+   intro
+  }
 
-  pd_pi
-  fivez_pi
-
-  learnings
-
-  mechanistic
-
-  main_findings
-
-  compare_with_fc0
-
-  predictive
-
-  for_paper
-
-
-
-
-  explanation_new
-
-  explanation_vllm
-
-  fiveZ_PI
-
-  hallmark_table
-  molecular_mechanisms
-  all_molecular_mechanisms.rb
-
-  synthesis
-
-  molecular_validation
-  network_construction_v2
-  network_construction_vllm
-
-  plan
-
-  explanaion_vllm
-
-  run_plan
-
-  judge_network
-
-
-
-  fatima
-
-  model
-
-  other_data
-
-
-
-  top_robustness
-
-  network
-
-
-  explanation
-  judge
-  mechanism
-
-  documentation
-  gene_names
-  sequence
-
-  comparison
-  high_level
-  high_level.rb
-  tf_summaries.rb
   system=system{
    bioinformatician
    biologist
@@ -90,83 +34,137 @@ AGS=/$PWD filter="*.rb *.rake Rakefile *.rdoc *.R *.sh *.js *.haml *.sass *.txt 
    objective
    results
   }
-  themes=themes{
+
+  analysis=.{
+   methodology
+
+   pd_pi
+   fivez_pi
+
+   learnings
+
+   mechanistic
+
+   main_findings
+
+   compare_with_fc0
+
+   predictive
+
+   for_paper
+
+   explanation_new
+
+   explanation_vllm
+
+   fiveZ_PI
+
+   hallmark_table
+   molecular_mechanisms
+   all_molecular_mechanisms.rb
+
+   synthesis
+
+   molecular_validation
+   network_construction_v2
+   network_construction_vllm
+
+
+   explanaion_vllm
+
+   judge_network
+
+   model
+
+   other_data
+
+   top_robustness
+
+   network
+
+   explanation
+   judge
+   mechanism
+   comparison
+   high_level
+   high_level.rb
+   tf_summaries.rb
+   tf=tf{
+    AHR
+    ATF3
+    ATF4
+    BCL3
+    BCL6
+    CEBPD
+    DDIT3
+    DOT1L
+    ELF4
+    ETV6
+    FOXO1
+    FOXO3
+    FOXO4
+    HBP1
+    IRF8
+    KLF11
+    KLF2
+    KLF6
+    MEF2A
+    MEF2D
+    MLXIPL
+    MTA1
+    MXD1
+    NCOA3
+    NR1H2
+    PPARA
+    PPARD
+    PROX1
+    RARG
+    RXRA
+    SKIL
+    SMAD3
+    SMAD4
+    TET2
+   }
+   tf_tgs=tf_tgs{
+    AHR
+    ATF3
+    ATF4
+    BCL3
+    BCL6
+    CEBPD
+    DDIT3
+    DOT1L
+    ELF4
+    ETV6
+    FOXO1
+    FOXO3
+    FOXO4
+    HBP1
+    IRF8
+    KLF11
+    KLF2
+    KLF6
+    MEF2A
+    MEF2D
+    MLXIPL
+    MTA1
+    MXD1
+    NCOA3
+    NR1H2
+    PPARA
+    PPARD
+    PROX1
+    RARB
+    RARG
+    RXRA
+    SKIL
+    SMAD3
+    SMAD4
+    TET2
+   }
   }
-  tf=tf{
-   AHR
-   ATF3
-   ATF4
-   BCL3
-   BCL6
-   CEBPD
-   DDIT3
-   DOT1L
-   ELF4
-   ETV6
-   FOXO1
-   FOXO3
-   FOXO4
-   HBP1
-   IRF8
-   KLF11
-   KLF2
-   KLF6
-   MEF2A
-   MEF2D
-   MLXIPL
-   MTA1
-   MXD1
-   NCOA3
-   NR1H2
-   PPARA
-   PPARD
-   PROX1
-   RARG
-   RXRA
-   SKIL
-   SMAD3
-   SMAD4
-   TET2
-  }
-  tf_tgs=tf_tgs{
-   AHR
-   ATF3
-   ATF4
-   BCL3
-   BCL6
-   CEBPD
-   DDIT3
-   DOT1L
-   ELF4
-   ETV6
-   FOXO1
-   FOXO3
-   FOXO4
-   HBP1
-   IRF8
-   KLF11
-   KLF2
-   KLF6
-   MEF2A
-   MEF2D
-   MLXIPL
-   MTA1
-   MXD1
-   NCOA3
-   NR1H2
-   PPARA
-   PPARD
-   PROX1
-   RARB
-   RARG
-   RXRA
-   SKIL
-   SMAD3
-   SMAD4
-   TET2
-  }
- }
- bin=bin filter="*"{
+
+  changes
  }
  lib=lib {
   knowledge_base=knowledge_base{
@@ -184,7 +182,7 @@ AGS=/$PWD filter="*.rb *.rake Rakefile *.rdoc *.R *.sh *.js *.haml *.sass *.txt 
     rules.rb
     rules_refactored.rb
    }
-   INSPEcT.rb
+   gene_info.rb
    INSPEcT=INSPEcT{
     synthesis.rb
    }
@@ -216,10 +214,9 @@ AGS=/$PWD filter="*.rb *.rake Rakefile *.rdoc *.R *.sh *.js *.haml *.sass *.txt 
    mcp.rb
 
    freeze.rb
+
+   figures.rb
   }
- }
- test=test {
-  test_helper.rb
  }
  data=data filter="*"{
   EXTRI2-regulome_dbTFs_coTFs_230425.tsv
@@ -228,22 +225,6 @@ AGS=/$PWD filter="*.rb *.rake Rakefile *.rdoc *.R *.sh *.js *.haml *.sass *.txt 
    deseq2_log2foldchange_ashrshrink_outliersremoved_untreatedT0asreference_independentfiltering.txt
    deseq2_pvalue_fdradjusted_outliersremoved_untreatedT0asreference_independentfiltering.txt
    samples.txt
-  }
- }
- modules=modules filter="*"{
-  TFe-nekofinder=TFe-nekofinder{
-   GeneRegulators.csv
-   README.md
-   TF_list.csv
-   TFe_Report.docx
-   TFe_bootstrap.py
-   TFe_cluster_bootstrap.slurm
-   TFe_pipeline.py
-   TFe_protocol.ipynb
-   arguments.txt
-   combined_drug_targets.csv
-   net_oncologics.sif
-   signor_filtered.tsv
   }
  }
  www=www{

@@ -5,3 +5,9 @@ pkg
 .ipynb_checkpoints
 chats
 sandbox
+results
+results.old
+results.save
+tmp
+
+
