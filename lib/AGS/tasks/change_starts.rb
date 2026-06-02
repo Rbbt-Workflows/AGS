@@ -178,10 +178,10 @@ module AGS
   input :next_min_8h, :float, "", 0.02
   input :low_multiplier_8h, :float, "", 12
   input :mid_multiplier_8h, :float, "", 0.5
-  input :low_min_24h, :float, "", 0.25
-  input :mid_min_24h, :float, "", 0.25
-  input :high_min_24h, :float, "", 0.25
-  input :next_min_24h, :float, "", 0.15
+  input :low_min_24h, :float, "", 0.5
+  input :mid_min_24h, :float, "", 0.5
+  input :high_min_24h, :float, "", 0.5
+  input :next_min_24h, :float, "", 0.5
   input :low_multiplier_24h, :float, "", 8
   input :mid_multiplier_24h, :float, "", 0.9
   input :fc_one_threshold, :float, 'Threshold for fold-change p-value of one step back (max of individual p-values against 0)', nil

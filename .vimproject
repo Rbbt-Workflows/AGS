@@ -1,8 +1,155 @@
 AGS=/$PWD filter="*.rb *.rake Rakefile *.rdoc *.R *.sh *.js *.haml *.sass *.txt *.conf" {
  workflow.rb
  chats=chats filter="*"{
-  freeze=freeze{
-   compare.rb
+  old=./{
+   freeze=freeze{
+    compare.rb
+   }
+
+   results=results{
+    intro
+   }
+
+   system=system{
+    bioinformatician
+    biologist
+   }
+   intro=intro{
+    setup
+    objective
+    results
+   }
+
+   analysis=.{
+    methodology
+
+    pd_pi
+    fivez_pi
+
+    learnings
+
+    mechanistic
+
+    main_findings
+
+    compare_with_fc0
+
+    predictive
+
+    for_paper
+
+    explanation_new
+
+    explanation_vllm
+
+    fiveZ_PI
+
+    hallmark_table
+    molecular_mechanisms
+    all_molecular_mechanisms.rb
+
+    synthesis
+
+    molecular_validation
+    network_construction_v2
+    network_construction_vllm
+
+
+    explanaion_vllm
+
+    judge_network
+
+    model
+
+    other_data
+
+    top_robustness
+
+    network
+
+    explanation
+    judge
+    mechanism
+    comparison
+    high_level
+    high_level.rb
+    tf_summaries.rb
+    tf=tf{
+     AHR
+     ATF3
+     ATF4
+     BCL3
+     BCL6
+     CEBPD
+     DDIT3
+     DOT1L
+     ELF4
+     ETV6
+     FOXO1
+     FOXO3
+     FOXO4
+     HBP1
+     IRF8
+     KLF11
+     KLF2
+     KLF6
+     MEF2A
+     MEF2D
+     MLXIPL
+     MTA1
+     MXD1
+     NCOA3
+     NR1H2
+     PPARA
+     PPARD
+     PROX1
+     RARG
+     RXRA
+     SKIL
+     SMAD3
+     SMAD4
+     TET2
+    }
+    tf_tgs=tf_tgs{
+     AHR
+     ATF3
+     ATF4
+     BCL3
+     BCL6
+     CEBPD
+     DDIT3
+     DOT1L
+     ELF4
+     ETV6
+     FOXO1
+     FOXO3
+     FOXO4
+     HBP1
+     IRF8
+     KLF11
+     KLF2
+     KLF6
+     MEF2A
+     MEF2D
+     MLXIPL
+     MTA1
+     MXD1
+     NCOA3
+     NR1H2
+     PPARA
+     PPARD
+     PROX1
+     RARB
+     RARG
+     RXRA
+     SKIL
+     SMAD3
+     SMAD4
+     TET2
+    }
+   }
+
+   changes
   }
   paper=paper{
    AGS_methods_from_code.md
@@ -17,154 +164,35 @@ AGS=/$PWD filter="*.rb *.rake Rakefile *.rdoc *.R *.sh *.js *.haml *.sass *.txt 
 
    thursday_meeting.txt
 
+   monday_meeting.txt
+
    results_section
-   results_section_v2
+   results_section_images
+   results_section_images2
+
+   results_section-v2
+   results_section-v3
+
+   results_figures_notes
+
+
+   cutoff_investigation
+
+   results_prep
+
+   results_prep_1_freeze
+
+   results_figures
+
   }
+ }
 
-  results=results{
-   intro
-  }
-
-  system=system{
-   bioinformatician
-   biologist
-  }
-  intro=intro{
-   setup
-   objective
-   results
-  }
-
-  analysis=.{
-   methodology
-
-   pd_pi
-   fivez_pi
-
-   learnings
-
-   mechanistic
-
-   main_findings
-
-   compare_with_fc0
-
-   predictive
-
-   for_paper
-
-   explanation_new
-
-   explanation_vllm
-
-   fiveZ_PI
-
-   hallmark_table
-   molecular_mechanisms
-   all_molecular_mechanisms.rb
-
-   synthesis
-
-   molecular_validation
-   network_construction_v2
-   network_construction_vllm
-
-
-   explanaion_vllm
-
-   judge_network
-
-   model
-
-   other_data
-
-   top_robustness
-
-   network
-
-   explanation
-   judge
-   mechanism
-   comparison
-   high_level
-   high_level.rb
-   tf_summaries.rb
-   tf=tf{
-    AHR
-    ATF3
-    ATF4
-    BCL3
-    BCL6
-    CEBPD
-    DDIT3
-    DOT1L
-    ELF4
-    ETV6
-    FOXO1
-    FOXO3
-    FOXO4
-    HBP1
-    IRF8
-    KLF11
-    KLF2
-    KLF6
-    MEF2A
-    MEF2D
-    MLXIPL
-    MTA1
-    MXD1
-    NCOA3
-    NR1H2
-    PPARA
-    PPARD
-    PROX1
-    RARG
-    RXRA
-    SKIL
-    SMAD3
-    SMAD4
-    TET2
-   }
-   tf_tgs=tf_tgs{
-    AHR
-    ATF3
-    ATF4
-    BCL3
-    BCL6
-    CEBPD
-    DDIT3
-    DOT1L
-    ELF4
-    ETV6
-    FOXO1
-    FOXO3
-    FOXO4
-    HBP1
-    IRF8
-    KLF11
-    KLF2
-    KLF6
-    MEF2A
-    MEF2D
-    MLXIPL
-    MTA1
-    MXD1
-    NCOA3
-    NR1H2
-    PPARA
-    PPARD
-    PROX1
-    RARB
-    RARG
-    RXRA
-    SKIL
-    SMAD3
-    SMAD4
-    TET2
-   }
-  }
-
-  changes
+ paper=paper filter="*"{
+  methods_main_nar.md
+  methods_supplementary_nar.md
+  references_methods.md
+  results_data_guide.md
+  results_draft.md
  }
  lib=lib {
   knowledge_base=knowledge_base{
@@ -172,16 +200,18 @@ AGS=/$PWD filter="*.rb *.rake Rakefile *.rdoc *.R *.sh *.js *.haml *.sass *.txt 
   }
   sinatra.rb
   tasks=AGS/tasks{
+   results_development.rb
+
    NTNU.rb
    gene_counts.rb
    gene_clusters.rb
-   change_starts.rb
-   tf_type.rb
    gene_clusters=gene_clusters{
     rules.old.rb
     rules.rb
     rules_refactored.rb
    }
+   change_starts.rb
+   tf_type.rb
    gene_info.rb
    INSPEcT=INSPEcT{
     synthesis.rb
@@ -235,8 +265,8 @@ AGS=/$PWD filter="*.rb *.rake Rakefile *.rdoc *.R *.sh *.js *.haml *.sass *.txt 
     }
     decoupler_pre=decoupler_pre{
      job_result.haml
-    }
-    timepoint_matrix=timepoint_matrix{
+     }
+     timepoint_matrix=timepoint_matrix{
      job_result.haml
     }
    }

@@ -280,7 +280,7 @@ end
 
 require 'AGS/tasks/NTNU'
 require 'AGS/tasks/gene_counts'
-require 'AGS/tasks/gene_clusters'
+#require 'AGS/tasks/gene_clusters'
 require 'AGS/tasks/change_starts'
 require 'AGS/tasks/tf_type'
 require 'AGS/tasks/gene_info'
@@ -303,6 +303,8 @@ require 'AGS/tasks/sequence'
 require 'AGS/tasks/rule_variants'
 
 require 'AGS/tasks/mcp'
+
+require 'AGS/tasks/results_development'
 
 require 'AGS/tasks/freeze'
 

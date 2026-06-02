@@ -51,12 +51,6 @@ module AGS
         }
       end
 
-      #res = []
-      #AGS::TIME_POINTS.each_with_index do |time_point,i|
-      #  res << (values[i].to_f > 0 && positive_activities.include?(time_point)) || (values[i].to_f < 0 && negative_activities.include?(time_point))
-      #end
-      #res = res.collect{|c| c ? 1 : 0 }
-
       res = []
       AGS::TIME_POINTS.each_with_index do |time_point,i|
         res << begin
