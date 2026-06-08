@@ -101,6 +101,104 @@ module AGS
     value == true || value.to_s == 'true'
   end
 
+  helper :parse_go_obo_terms do |text|
+    terms = {}
+    current = nil
+    in_term = false
+
+    finalize = lambda do
+      if current && current[:id] && ! current[:obsolete]
+        terms[current[:id]] = current
+      end
+    end
+
+    text.each_line do |line|
+      line = line.chomp
+      case line
+      when '[Term]'
+        finalize.call
+        current = {:parents => []}
+        in_term = true
+      when /^\[/
+        finalize.call if in_term
+        current = nil
+        in_term = false
+      else
+        next unless in_term && current
+        case line
+        when /^id:\s+(GO:\d+)/
+          current[:id] = $1
+        when /^name:\s+(.+)/
+          current[:name] = $1.strip
+        when /^namespace:\s+(.+)/
+          current[:namespace] = $1.strip
+        when /^is_a:\s+(GO:\d+)/
+          current[:parents] << $1
+        when /^relationship:\s+part_of\s+(GO:\d+)/
+          current[:parents] << $1
+        when /^is_obsolete:\s+true/
+          current[:obsolete] = true
+        end
+      end
+    end
+    finalize.call
+    terms
+  end
+
+  helper :go_ancestors_for_term do |term_id, terms, cache, visiting = nil|
+    visiting ||= {}
+    return cache[term_id] if cache.include?(term_id)
+    return [] if visiting[term_id]
+    term = terms[term_id]
+    return cache[term_id] = [] if term.nil?
+
+    visiting[term_id] = true
+    ancestors = [term_id]
+    term[:parents].each do |parent|
+      ancestors.concat(go_ancestors_for_term(parent, terms, cache, visiting))
+    end
+    visiting.delete(term_id)
+    cache[term_id] = ancestors.uniq
+  end
+
+  helper :hypergeom_upper_tail do |k, m, n, population|
+    k = k.to_i
+    m = m.to_i
+    n = n.to_i
+    population = population.to_i
+    return 1.0 if k <= 0 || m <= 0 || n <= 0 || population <= 0
+    max_k = [m, n].min
+    return 1.0 if k > max_k
+
+    log_choose = lambda do |a,b|
+      return -Float::INFINITY if b < 0 || b > a
+      Math.lgamma(a + 1)[0] - Math.lgamma(b + 1)[0] - Math.lgamma(a - b + 1)[0]
+    end
+
+    denom = log_choose.call(population, n)
+    logs = (k..max_k).collect do |i|
+      log_choose.call(m, i) + log_choose.call(population - m, n - i) - denom
+    end
+    max_log = logs.max
+    return 0.0 if max_log == -Float::INFINITY
+    pvalue = Math.exp(max_log) * logs.collect{|l| Math.exp(l - max_log) }.inject(0.0, &:+)
+    [[pvalue, 1.0].min, 0.0].max
+  end
+
+  helper :bh_adjust_values do |pvalues|
+    indexed = pvalues.each_with_index.select{|pvalue,i| ! pvalue.nil? }.sort_by{|pvalue,i| pvalue.to_f }
+    adjusted = Array.new(pvalues.length)
+    m = indexed.length
+    min_q = 1.0
+    indexed.reverse.each_with_index do |(pvalue, i), rank_from_end|
+      rank = m - rank_from_end
+      qvalue = pvalue.to_f * m / rank
+      min_q = [min_q, qvalue].min
+      adjusted[i] = [min_q, 1.0].min
+    end
+    adjusted
+  end
+
   helper :result_treatment_order do
     %w(DMSO FiveZ INT_FiveZ_PI INT_PD_PI PD PI)
   end
@@ -1085,6 +1183,228 @@ module AGS
       oratio = dyn_odds.nil? || nd_odds.nil? || nd_odds == 0 ? nil : dyn_odds / nd_odds
       id += 1
       tsv[id] = key + [scalar_value(scalar_value(dyn[idx['Matches']])), scalar_value(scalar_value(dyn[idx['Miss']])), scalar_value(scalar_value(dyn[idx['Total']])), scalar_value(scalar_value(nd[idx['Matches']])), scalar_value(scalar_value(nd[idx['Miss']])), scalar_value(scalar_value(nd[idx['Total']])), scalar_value(scalar_value(dyn[idx['MatchFraction']])), scalar_value(scalar_value(nd[idx['MatchFraction']])), oratio]
+    end
+    tsv
+  end
+
+
+  input :go_slim_url, :string, 'URL for the generic GO slim OBO subset', 'https://current.geneontology.org/ontology/subsets/goslim_generic.obo'
+  task :go_slim_bp_terms => :tsv do |go_slim_url|
+    require 'open-uri'
+    slim_text = URI.open(go_slim_url, 'User-Agent' => 'Mozilla/5.0').read
+    slim_terms = parse_go_obo_terms(slim_text)
+
+    tsv = TSV.setup({}, 'SlimGOID~SlimName,Namespace')
+    slim_terms.keys.sort.each do |go_id|
+      term = slim_terms[go_id]
+      next unless term[:namespace] == 'biological_process'
+      tsv[go_id] = [term[:name], term[:namespace]]
+    end
+    tsv
+  end
+
+  input :go_basic_url, :string, 'URL for go-basic.obo', 'https://current.geneontology.org/ontology/go-basic.obo'
+  input :go_slim_url, :string, 'URL for the generic GO slim OBO subset', 'https://current.geneontology.org/ontology/subsets/goslim_generic.obo'
+  task :go_bp_to_goslim_map => :tsv do |go_basic_url, go_slim_url|
+    require 'open-uri'
+    require 'set'
+
+    go_text = URI.open(go_basic_url, 'User-Agent' => 'Mozilla/5.0').read
+    slim_text = URI.open(go_slim_url, 'User-Agent' => 'Mozilla/5.0').read
+
+    terms = parse_go_obo_terms(go_text)
+    slim_terms = parse_go_obo_terms(slim_text)
+    slim_bp_ids = slim_terms.keys.select{|go_id| slim_terms[go_id][:namespace] == 'biological_process' }
+    slim_bp_set = slim_bp_ids.to_set
+    ancestor_cache = {}
+
+    tsv = TSV.setup({}, :key_field => 'GOID', :fields => %w(GOName Namespace SlimGOIDs SlimNames SlimGOIDsAll SlimNamesAll), :type => :list)
+    terms.keys.sort.each do |go_id|
+      term = terms[go_id]
+      next unless term[:namespace] == 'biological_process'
+      all_slim = (go_ancestors_for_term(go_id, terms, ancestor_cache) & slim_bp_ids)
+      next if all_slim.empty?
+
+      reduced = all_slim.reject do |candidate|
+        all_slim.any? do |other|
+          other != candidate && go_ancestors_for_term(other, terms, ancestor_cache).include?(candidate)
+        end
+      end
+      reduced = all_slim if reduced.empty?
+      reduced = reduced.sort
+      all_slim = all_slim.sort
+
+      tsv[go_id] = [
+        term[:name],
+        term[:namespace],
+        reduced * '|',
+        reduced.collect{|slim_id| slim_terms[slim_id] ? slim_terms[slim_id][:name] : terms[slim_id][:name] } * '|',
+        all_slim * '|',
+        all_slim.collect{|slim_id| slim_terms[slim_id] ? slim_terms[slim_id][:name] : terms[slim_id][:name] } * '|'
+      ]
+    end
+    tsv
+  end
+
+  dep :go_bp_to_goslim_map
+  task :gene_goslim_bp_annotations => :tsv do
+    go_to_slim = step(:go_bp_to_goslim_map).load
+    gene_go = Organism.gene_go_bp(AGS.organism).tsv(type: :flat)
+    identifiers = Organism.identifiers(AGS.organism).tsv(:key_field => 'Ensembl Gene ID', :fields => ['Associated Gene Name'], :type => :flat)
+
+    slim_name_by_id = {}
+    go_to_slim.through do |go_id, values|
+      values = NamedArray.setup(values, go_to_slim.fields)
+      ids = scalar_value(values['SlimGOIDs']).to_s.split('|').reject{|v| v.empty? }
+      names = scalar_value(values['SlimNames']).to_s.split('|')
+      ids.each_with_index{|slim_id, i| slim_name_by_id[slim_id] ||= names[i] || slim_id }
+    end
+
+    annotations_by_gene = Hash.new{|h,k| h[k] = [] }
+    gene_go.through do |ensembl_gene, go_ids|
+      next unless identifiers.include?(ensembl_gene)
+      gene_names = [identifiers[ensembl_gene]].flatten.compact.collect(&:to_s).reject{|gene| gene.empty? }
+      next if gene_names.empty?
+      slim_ids = []
+      [go_ids].flatten.compact.each do |go_id|
+        next unless go_to_slim.include?(go_id)
+        slim_ids.concat scalar_value(go_to_slim[go_id]['SlimGOIDs']).to_s.split('|').reject{|v| v.empty? }
+      end
+      slim_ids = slim_ids.uniq
+      next if slim_ids.empty?
+      gene_names.each{|gene| annotations_by_gene[gene].concat(slim_ids) }
+    end
+
+    tsv = TSV.setup({}, :key_field => 'Associated Gene Name', :fields => %w(SlimGOIDs SlimNames), :type => :list, :namespace => AGS.organism)
+    annotations_by_gene.keys.sort.each do |gene|
+      slim_ids = annotations_by_gene[gene].uniq.sort
+      tsv[gene] = [slim_ids * '|', slim_ids.collect{|slim_id| slim_name_by_id[slim_id] || slim_id } * '|']
+    end
+    tsv
+  end
+
+  dep :full_gene_info
+  input :source_type, :select, 'Gene sets to summarize', 'cluster', :select_options => %w(cluster)
+  task :goslim_bp_gene_sets => :tsv do |source_type|
+    info = step(:full_gene_info).load
+    tsv = TSV.setup({}, :key_field => 'ID', :fields => %w(Treatment Time Direction SourceType Genes QuerySize), :type => :list, :namespace => AGS.organism)
+    id = 0
+
+    result_treatment_order.each do |treatment|
+      AGS::TIME_POINTS.each do |time_point|
+        %w(up down both).each do |direction|
+          genes = []
+          info.through do |gene, values|
+            values = NamedArray.setup(values, info.fields)
+            events = onset_events(values["#{treatment}: FC clusters"])
+            selected = events.select{|event| event[:start_time] == time_point }
+            selected = selected.select{|event| event[:direction] == direction } unless direction == 'both'
+            genes << gene if selected.any?
+          end
+          id += 1
+          genes = genes.uniq.sort
+          tsv[id] = [treatment, time_point, direction, source_type, genes * '|', genes.length]
+        end
+      end
+    end
+    tsv
+  end
+
+  dep :goslim_bp_gene_sets
+  dep :gene_goslim_bp_annotations
+  dep :expressed_coding_genes
+  input :min_query_size, :integer, 'Minimum genes in query set', 10
+  input :min_intersection, :integer, 'Minimum genes in GO slim term intersection', 3
+  task :goslim_bp_enrichment => :tsv do |min_query_size, min_intersection|
+    require 'set'
+    gene_sets = step(:goslim_bp_gene_sets).load
+    annotations = step(:gene_goslim_bp_annotations).load
+    background = step(:expressed_coding_genes).load.collect(&:to_s).to_set
+    annotated_background = background & annotations.keys.collect(&:to_s).to_set
+
+    genes_by_slim = Hash.new{|h,k| h[k] = [] }
+    slim_name = {}
+    annotations.through do |gene, values|
+      values = NamedArray.setup(values, annotations.fields)
+      next unless annotated_background.include?(gene.to_s)
+      ids = scalar_value(values['SlimGOIDs']).to_s.split('|').reject{|v| v.empty? }
+      names = scalar_value(values['SlimNames']).to_s.split('|')
+      ids.each_with_index do |slim_id, i|
+        genes_by_slim[slim_id] << gene.to_s
+        slim_name[slim_id] ||= names[i] || slim_id
+      end
+    end
+    genes_by_slim.each{|slim_id, genes| genes.uniq! }
+
+    raw_rows = []
+    gene_sets.through do |set_id, values|
+      values = NamedArray.setup(values, gene_sets.fields)
+      treatment = scalar_value(values['Treatment'])
+      time_point = scalar_value(values['Time']).to_i
+      direction = scalar_value(values['Direction'])
+      source_type = scalar_value(values['SourceType'])
+      query_genes = scalar_value(values['Genes']).to_s.split('|').reject{|v| v.empty? }.to_set & annotated_background
+      next if query_genes.length < min_query_size
+
+      pvalues = []
+      rows = []
+      genes_by_slim.keys.sort.each do |slim_id|
+        term_genes = genes_by_slim[slim_id].to_set
+        intersection = (query_genes & term_genes).to_a.sort
+        next if intersection.length < min_intersection
+        pvalue = hypergeom_upper_tail(intersection.length, term_genes.length, query_genes.length, annotated_background.length)
+        pvalues << pvalue
+        rows << [treatment, time_point, direction, source_type, slim_id, slim_name[slim_id], query_genes.length, term_genes.length, intersection.length, pvalue, nil, intersection.length.to_f / query_genes.length, intersection.length.to_f / term_genes.length, intersection * '|']
+      end
+      qvalues = bh_adjust_values(pvalues)
+      rows.each_with_index do |row, row_i|
+        row[10] = qvalues[row_i]
+        raw_rows << row
+      end
+    end
+
+    tsv = TSV.setup({}, :key_field => 'ID', :fields => %w(Treatment Time Direction SourceType SlimGOID SlimName QuerySize TermBackgroundSize IntersectionSize PValue AdjustedPValue Precision Recall Genes), :type => :list, :namespace => AGS.organism)
+    raw_rows.sort_by{|row| [standard_treatment_sort_index(row[0]), row[1].to_i, row[2].to_s, row[10].to_f, row[5].to_s] }.each_with_index do |row, i|
+      tsv[i + 1] = row
+    end
+    tsv
+  end
+
+  dep :goslim_bp_enrichment
+  input :adjusted_pvalue_threshold, :float, 'Adjusted p-value threshold', 0.05
+  input :top_n_per_context, :integer, 'Top GO slim terms to retain per treatment, time, and direction', 5
+  task :goslim_bp_top_terms => :tsv do |adjusted_pvalue_threshold, top_n_per_context|
+    enrichment = step(:goslim_bp_enrichment).load
+    idx = Hash[enrichment.fields.each_with_index.to_a]
+    grouped = Hash.new{|h,k| h[k] = [] }
+    enrichment.through do |row_id, values|
+      qvalue = numeric_value(values[idx['AdjustedPValue']], 1.0)
+      next if qvalue > adjusted_pvalue_threshold
+      key = [scalar_value(values[idx['Treatment']]), scalar_value(values[idx['Time']]).to_i, scalar_value(values[idx['Direction']])]
+      grouped[key] << values
+    end
+
+    tsv = TSV.setup({}, :key_field => 'ID', :fields => %w(Treatment Time Direction SlimGOID SlimName QuerySize TermBackgroundSize IntersectionSize PValue AdjustedPValue Precision Recall Genes), :type => :list, :namespace => AGS.organism)
+    id = 0
+    grouped.keys.sort_by{|treatment,time,direction| [standard_treatment_sort_index(treatment), time, direction.to_s] }.each do |key|
+      grouped[key].sort_by{|values| [numeric_value(values[idx['AdjustedPValue']], 1.0), -numeric_value(values[idx['IntersectionSize']], 0), scalar_value(values[idx['SlimName']]).to_s] }.first(top_n_per_context).each do |values|
+        id += 1
+        tsv[id] = [
+          scalar_value(values[idx['Treatment']]),
+          scalar_value(values[idx['Time']]),
+          scalar_value(values[idx['Direction']]),
+          scalar_value(values[idx['SlimGOID']]),
+          scalar_value(values[idx['SlimName']]),
+          scalar_value(values[idx['QuerySize']]),
+          scalar_value(values[idx['TermBackgroundSize']]),
+          scalar_value(values[idx['IntersectionSize']]),
+          scalar_value(values[idx['PValue']]),
+          scalar_value(values[idx['AdjustedPValue']]),
+          scalar_value(values[idx['Precision']]),
+          scalar_value(values[idx['Recall']]),
+          values[idx['Genes']]
+        ]
+      end
     end
     tsv
   end
