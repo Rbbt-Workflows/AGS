@@ -1409,4 +1409,150 @@ module AGS
     tsv
   end
 
+
+  # Manuscript-ready result tables
+  #
+  # These tasks reshape the long-form workflow summaries into wide tables that
+  # can be pasted directly into the working manuscript. They deliberately read
+  # from the primary workflow outputs rather than from hand-copied markdown
+  # tables, so they remain synchronized with changes in onset thresholds such as
+  # the reverted default 24 h cutoff.
+
+  dep :de_gene_counts_fc0, :fc0_threshold => 0.0, :pvalue_threshold => 0.05
+  task :results_table_de_gene_counts_fc0 => :tsv do
+    counts = step(:de_gene_counts_fc0).load
+    by_key = {}
+    counts.through do |id, values|
+      values = NamedArray.setup(values, counts.fields)
+      next unless scalar_value(values['Direction']) == 'both'
+      by_key[[scalar_value(values['Treatment']), scalar_value(values['Time']).to_i]] = scalar_value(values['Genes']).to_i
+    end
+
+    fields = AGS::TIME_POINTS.collect{|time| "#{time} h" }
+    tsv = TSV.setup({}, :key_field => 'Treatment', :fields => fields, :type => :list)
+    result_treatment_order.each do |treatment|
+      tsv[treatment] = AGS::TIME_POINTS.collect{|time| by_key[[treatment, time]] || 0 }
+    end
+    tsv
+  end
+
+  dep :onset_first_counts
+  task :results_table_onset_first_counts => :tsv do
+    counts = step(:onset_first_counts).load
+    by_key = {}
+    counts.through do |id, values|
+      values = NamedArray.setup(values, counts.fields)
+      by_key[[scalar_value(values['Treatment']), scalar_value(values['Time']).to_i, scalar_value(values['Direction'])]] = scalar_value(values['Genes']).to_i
+    end
+
+    fields = AGS::TIME_POINTS.collect{|time| ["inc #{time} h", "dec #{time} h"] }.flatten + ['Total dynamic']
+    tsv = TSV.setup({}, :key_field => 'Treatment', :fields => fields, :type => :list)
+    result_treatment_order.each do |treatment|
+      row = []
+      total = 0
+      AGS::TIME_POINTS.each do |time|
+        up = by_key[[treatment, time, 'up']] || 0
+        down = by_key[[treatment, time, 'down']] || 0
+        total += up + down
+        row.concat [up, down]
+      end
+      row << total
+      tsv[treatment] = row
+    end
+    tsv
+  end
+
+  dep :onset_episode_counts
+  task :results_table_onset_episode_counts => :tsv do
+    counts = step(:onset_episode_counts).load
+    by_key = {}
+    counts.through do |id, values|
+      values = NamedArray.setup(values, counts.fields)
+      by_key[[scalar_value(values['Treatment']), scalar_value(values['Time']).to_i, scalar_value(values['Direction'])]] = scalar_value(values['Episodes']).to_i
+    end
+
+    fields = AGS::TIME_POINTS.collect{|time| ["inc #{time} h", "dec #{time} h"] }.flatten + ['Total episodes']
+    tsv = TSV.setup({}, :key_field => 'Treatment', :fields => fields, :type => :list)
+    result_treatment_order.each do |treatment|
+      row = []
+      total = 0
+      AGS::TIME_POINTS.each do |time|
+        up = by_key[[treatment, time, 'up']] || 0
+        down = by_key[[treatment, time, 'down']] || 0
+        total += up + down
+        row.concat [up, down]
+      end
+      row << total
+      tsv[treatment] = row
+    end
+    tsv
+  end
+
+  dep :tf_activity_call_counts_dynamic
+  task :results_table_tf_activity_counts_dynamic => :tsv do
+    counts = step(:tf_activity_call_counts_dynamic).load
+    by_key = {}
+    counts.through do |id, values|
+      values = NamedArray.setup(values, counts.fields)
+      by_key[[scalar_value(values['Treatment']), scalar_value(values['Time']).to_i, scalar_value(values['Sign'])]] = scalar_value(values['TFActivityCalls']).to_i
+    end
+
+    fields = AGS::TIME_POINTS.collect{|time| ["T#{time} positive", "T#{time} negative", "T#{time} total"] }.flatten
+    tsv = TSV.setup({}, :key_field => 'Treatment', :fields => fields, :type => :list)
+    result_treatment_order.each do |treatment|
+      row = []
+      AGS::TIME_POINTS.each do |time|
+        row << (by_key[[treatment, time, 'positive']] || 0)
+        row << (by_key[[treatment, time, 'negative']] || 0)
+        row << (by_key[[treatment, time, 'both']] || 0)
+      end
+      tsv[treatment] = row
+    end
+    tsv
+  end
+
+  dep :sequence_with_changes, :treatment => :placeholder do |jobname, options|
+    %w(DMSO FiveZ INT_FiveZ_PI INT_PD_PI PD PI).collect{|treatment| options.merge(:treatment => treatment) }
+  end
+  task :results_table_sequence_edge_counts => :tsv do
+    tsv = TSV.setup({}, :key_field => 'Treatment', :fields => ['Total sequence edges', 'Edges with both TFs self-consistent'], :type => :list)
+
+    dependencies.each do |dep|
+      treatment = dep.recursive_inputs[:treatment].to_s
+      data = dep.load
+      total = 0
+      both_self_consistent = 0
+      data.through do |id, values|
+        values = NamedArray.setup(values, data.fields)
+        total += 1
+        source_sc = scalar_value(values['Source self-consistent']).to_s == 'true'
+        target_sc = scalar_value(values['Target self-consistent']).to_s == 'true'
+        both_self_consistent += 1 if source_sc && target_sc
+      end
+      tsv[treatment] = [total, both_self_consistent]
+    end
+    tsv
+  end
+
+  dep :results_table_de_gene_counts_fc0
+  dep :results_table_onset_first_counts
+  dep :results_table_onset_episode_counts
+  dep :results_table_tf_activity_counts_dynamic
+  dep :results_table_sequence_edge_counts
+  task :results_manuscript_tables => :array do
+    paths = []
+    {
+      'table_de_gene_counts_fc0.tsv' => step(:results_table_de_gene_counts_fc0),
+      'table_onset_first_counts.tsv' => step(:results_table_onset_first_counts),
+      'table_onset_episode_counts.tsv' => step(:results_table_onset_episode_counts),
+      'table_tf_activity_counts_dynamic.tsv' => step(:results_table_tf_activity_counts_dynamic),
+      'table_sequence_edge_counts.tsv' => step(:results_table_sequence_edge_counts)
+    }.each do |filename, dep|
+      path = file(filename)
+      Open.write(path, dep.load.to_s)
+      paths << path
+    end
+    paths
+  end
+
 end
