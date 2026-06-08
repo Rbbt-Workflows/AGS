@@ -3,7 +3,7 @@ module AGS
   dep :regulome
   dep :full_gene_info
   dep :full_gene_info, low_min_24h:  1, mid_min_24h: 1, high_min_24h: 1, next_min_24h: 1 
-  dep :full_gene_info, low_min_24h:  0.25, mid_min_24h: 0.25, high_min_24h: 0.25, next_min_24h: 0.25
+  dep :full_gene_info, low_min_24h:  0.5, mid_min_24h: 0.5, high_min_24h: 0.5, next_min_24h: 0.5
   dep :treatment_tf_consistency do
     TREATMENTS.collect do |treatment|
       {treatment: treatment}
@@ -16,7 +16,7 @@ module AGS
   end
   dep :consistency_counts
   dep :consistency_counts, low_min_24h:  1, mid_min_24h: 1, high_min_24h: 1, next_min_24h: 1 
-  dep :consistency_counts, low_min_24h:  0.25, mid_min_24h: 0.25, high_min_24h: 0.25, next_min_24h: 0.25
+  dep :consistency_counts, low_min_24h:  0.5, mid_min_24h: 0.5, high_min_24h: 0.5, next_min_24h: 0.5
   dep :neko_bootstrap_sweep
   dep :neko_bootstrap_consistency do
     %w(PD PI FiveZ).collect do |treatment|
@@ -30,7 +30,7 @@ module AGS
         [
           options.merge({scheme: scheme}),
           options.merge({scheme: scheme, low_min_24h:  1, mid_min_24h: 1, high_min_24h: 1, next_min_24h: 1 }), 
-          options.merge({scheme: scheme, low_min_24h:  0.25, mid_min_24h: 0.25, high_min_24h: 0.25, next_min_24h: 0.25 }) 
+          options.merge({scheme: scheme, low_min_24h:  0.5, mid_min_24h: 0.5, high_min_24h: 0.5, next_min_24h: 0.5 }) 
         ]
       else
         options.merge({scheme: scheme})
@@ -80,7 +80,7 @@ module AGS
                  when :list_tfs
                    treatment, time_point, direction, threshold, scheme = dep.recursive_inputs.values_at :treatment, :time_point, :direction, :high_min_24h, :scheme
                    scheme = nil if scheme.to_s == 'dynamic'
-                   threshold = nil if threshold == 0.5
+                   threshold = nil if threshold == 0.25
                    threshold = "T24_fc_cutoff_#{threshold}" if threshold
                    time_point = "#{time_point}h" if time_point
                    ["list_tfs", treatment, time_point, direction, threshold, scheme].compact * "-" + ".list"
@@ -88,7 +88,7 @@ module AGS
                    treatment, time_point, direction, threshold, scheme = dep.recursive_inputs.values_at :treatment, :time_point, :direction, :high_min_24h, :scheme
                    scheme = nil if scheme.to_s == 'dynamic'
                    treatment = nil
-                   threshold = nil if threshold && threshold == 0.5
+                   threshold = nil if threshold && threshold == 0.25
                    threshold = "T24_fc_cutoff_#{threshold}" if threshold
                    time_point = "#{time_point}h" if time_point
                    time_point = nil
@@ -97,7 +97,7 @@ module AGS
                    treatment, time_point, direction, threshold, scheme = dep.recursive_inputs.values_at :treatment, :time_point, :direction, :high_min_24h, :scheme
                    scheme = nil if scheme.to_s == 'dynamic'
                    treatment = nil
-                   threshold = nil if threshold && threshold == 0.5
+                   threshold = nil if threshold && threshold == 0.25
                    threshold = "T24_fc_cutoff_#{threshold}" if threshold
                    time_point = "#{time_point}h" if time_point
                    time_point = nil
@@ -106,7 +106,7 @@ module AGS
                    treatment, time_point, direction, threshold, scheme, normalization = dep.recursive_inputs.values_at :treatment, :time_point, :direction, :high_min_24h, :scheme, :normalization
                    treatment = nil unless other
                    scheme = nil if scheme.to_s == 'dynamic'
-                   threshold = nil if threshold && threshold.to_f == 0.5
+                   threshold = nil if threshold && threshold.to_f == 0.25
                    threshold = "T24_fc_cutoff_#{threshold}" if threshold
                    time_point = "#{time_point}h" if time_point
                    time_point = nil
@@ -127,10 +127,10 @@ module AGS
     cluster_fields = info.fields.select{|f| f.include?('FC clusters') }
 
     info1 = file('full_gene_info-T24_fc_cutoff_1.tsv').tsv fields: cluster_fields
-    info05 = file('full_gene_info-T24_fc_cutoff_0.25.tsv').tsv fields: cluster_fields
+    info05 = file('full_gene_info-T24_fc_cutoff_0.5.tsv').tsv fields: cluster_fields
 
     info1.fields = info1.fields.collect{|f| f + ' T24_fc_cutoff_1' }
-    info05.fields = info05.fields.collect{|f| f + ' T24_fc_cutoff_0.25' }
+    info05.fields = info05.fields.collect{|f| f + ' T24_fc_cutoff_0.5' }
 
     info.attach info1
     info.attach info05
@@ -140,7 +140,7 @@ module AGS
     # TF Predictions
 
     preds = file('tf_predictions.tsv').tsv
-    %w( T24_fc_cutoff_0.25 T24_fc_cutoff_1 diff fc0 non-dynamic).each do |tag|
+    %w( T24_fc_cutoff_0.5 T24_fc_cutoff_1 diff fc0 non-dynamic).each do |tag|
       new = file("tf_predictions-#{tag}.tsv").tsv
       new.fields = new.fields.collect{|f| f + " #{tag}" }
       preds.attach new
