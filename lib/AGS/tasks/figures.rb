@@ -1145,64 +1145,686 @@ ggplot(data, aes(Time, MatchFraction, color=Scheme, group=Scheme)) + geom_line()
 RCODE
   end
 
+
   #############################################################################
-  # Convenience collectors
+  # Manuscript figure set with descriptive task names
   #############################################################################
 
+  def self.figure_r_plot(file, tsv, r_code, width = 1200, height = 900)
+    R::PNG.plot file, tsv, r_code, width, height
+    nil
+  end
+
   dep :figure_01b_concept_intermediate_phenotypes
+  extension :png
+  task :figure_overall_intermediate_phenotypes => :binary do
+    Open.cp step(:figure_01b_concept_intermediate_phenotypes).path, self.tmp_path
+    nil
+  end
+
   dep :figure_01c_concept_dynamic_workflow
-  dep :figure_02c_mrna_pca_treatment
-  dep :figure_02d_mrna_pca_time
-  dep :figure_02e_mrna_treatment_distance
-  dep :figure_03b_fc0_de_counts
-  dep :figure_03c_fc1_de_counts
-  dep :figure_04a_onset_first_counts
-  dep :figure_04b_onset_episode_counts
+  extension :png
+  task :figure_overall_dynamic_workflow => :binary do
+    Open.cp step(:figure_01c_concept_dynamic_workflow).path, self.tmp_path
+    nil
+  end
+
+  dep :fold_changes, :fc_source => 'NTNU'
+  extension :png
+  task :figure_mrna_pca_by_treatment => :binary do
+    fc0 = step(:fold_changes).load.transpose('Associated Gene Name')
+    fields = AGS.figure_context_fields('FC').select{|field| fc0.fields.include?(field) }
+    data_tsv = fc0.reorder('Associated Gene Name', fields)
+    AGS.figure_ggplot(self.tmp_path, data_tsv, <<-RCODE, 7, 5.5)
+mat <- data[, c(#{fields.collect{|f| "'#{f}'"} * ', '}), drop=FALSE]
+mat[] <- lapply(mat, as.numeric)
+mat[is.na(mat)] <- 0
+mat <- t(as.matrix(mat))
+keep <- apply(mat, 2, sd) > 0
+mat <- mat[, keep, drop=FALSE]
+pca <- prcomp(mat, center=TRUE, scale.=TRUE)
+contexts <- rownames(mat)
+plot_df <- data.frame(Context=contexts, PC1=pca$x[,1], PC2=pca$x[,2], stringsAsFactors=FALSE)
+tmp_context <- sub('^FC_', '', plot_df$Context)
+parts <- strsplit(tmp_context, '.T', fixed=TRUE)
+plot_df$Treatment <- vapply(parts, function(x) x[1], character(1))
+plot_df$Time <- as.numeric(vapply(parts, function(x) x[2], character(1)))
+plot_df$TreatmentLabel <- factor(plot_df$Treatment, levels=c(#{FIGURE_TREATMENT_ORDER.collect{|t| "'#{t}'"} * ','}), labels=c(#{AGS.figure_treatment_levels}))
+var_exp <- round(100 * (pca$sdev^2 / sum(pca$sdev^2)), 1)
+#{AGS.figure_treatment_color_scale('color')}
+ggplot(plot_df, aes(PC1, PC2, color=TreatmentLabel)) +
+  geom_point(aes(size=Time), alpha=0.9) +
+  scale_size_continuous(breaks=c(1,2,4,8,24), name='Time') +
+  theme_bw() + labs(x=paste0('PC1 (', var_exp[1], '%)'), y=paste0('PC2 (', var_exp[2], '%)'), color='Treatment') +
+  theme(legend.position='bottom')
+RCODE
+  end
+
+  dep :fold_changes, :fc_source => 'NTNU'
+  extension :png
+  task :figure_mrna_pca_by_time => :binary do
+    fc0 = step(:fold_changes).load.transpose('Associated Gene Name')
+    fields = AGS.figure_context_fields('FC').select{|field| fc0.fields.include?(field) }
+    data_tsv = fc0.reorder('Associated Gene Name', fields)
+    AGS.figure_ggplot(self.tmp_path, data_tsv, <<-RCODE, 7, 5.5)
+mat <- data[, c(#{fields.collect{|f| "'#{f}'"} * ', '}), drop=FALSE]
+mat[] <- lapply(mat, as.numeric)
+mat[is.na(mat)] <- 0
+mat <- t(as.matrix(mat))
+keep <- apply(mat, 2, sd) > 0
+mat <- mat[, keep, drop=FALSE]
+pca <- prcomp(mat, center=TRUE, scale.=TRUE)
+contexts <- rownames(mat)
+plot_df <- data.frame(Context=contexts, PC1=pca$x[,1], PC2=pca$x[,2], stringsAsFactors=FALSE)
+tmp_context <- sub('^FC_', '', plot_df$Context)
+parts <- strsplit(tmp_context, '.T', fixed=TRUE)
+plot_df$Treatment <- vapply(parts, function(x) x[1], character(1))
+plot_df$Time <- factor(as.numeric(vapply(parts, function(x) x[2], character(1))), levels=c(1,2,4,8,24), labels=c('1h','2h','4h','8h','24h'))
+plot_df$TreatmentLabel <- factor(plot_df$Treatment, levels=c(#{FIGURE_TREATMENT_ORDER.collect{|t| "'#{t}'"} * ','}), labels=c(#{AGS.figure_treatment_levels}))
+var_exp <- round(100 * (pca$sdev^2 / sum(pca$sdev^2)), 1)
+ggplot(plot_df, aes(PC1, PC2, color=Time, shape=TreatmentLabel)) +
+  geom_point(size=3, alpha=0.9) + scale_color_brewer(palette='YlOrRd') +
+  theme_bw() + labs(x=paste0('PC1 (', var_exp[1], '%)'), y=paste0('PC2 (', var_exp[2], '%)'), shape='Treatment') +
+  theme(legend.position='bottom')
+RCODE
+  end
+
+  dep :fold_changes, :fc_source => 'NTNU'
+  extension :png
+  task :figure_mrna_context_distance_clustered => :binary do
+    fc0 = step(:fold_changes).load.transpose('Associated Gene Name')
+    fields = AGS.figure_context_fields('FC').select{|field| fc0.fields.include?(field) }
+    data_tsv = fc0.reorder('Associated Gene Name', fields)
+    AGS.figure_r_plot(self.tmp_path, data_tsv, <<-RCODE, 1100, 1000)
+rbbt.require('gplots')
+mat <- data[, c(#{fields.collect{|f| "'#{f}'"} * ', '}), drop=FALSE]
+mat[] <- lapply(mat, as.numeric)
+mat[is.na(mat)] <- 0
+mat <- as.matrix(mat)
+cor_mat <- cor(mat, use='pairwise.complete.obs')
+dist_mat <- 1 - cor_mat
+labs <- colnames(dist_mat)
+labs <- sub('^FC_', '', labs)
+labs <- gsub('INT_FiveZ_PI', '5Z+PI', labs)
+labs <- gsub('INT_PD_PI', 'PD+PI', labs)
+labs <- gsub('FiveZ', '5Z', labs)
+labs <- gsub('\\\\.T', ' T', labs)
+rownames(dist_mat) <- labs
+colnames(dist_mat) <- labs
+heatmap.2(dist_mat, trace='none', col=colorRampPalette(c('white','#2166AC'))(101),
+          dendrogram='both', density.info='none', key.title='1-r', margins=c(9,9), symm=TRUE)
+RCODE
+  end
+
+  dep :de_gene_counts_fc0
+  extension :png
+  task :figure_de_counts_fc0_bar => :binary do
+    counts = step(:de_gene_counts_fc0).load
+    AGS.figure_ggplot(self.tmp_path, counts, <<-RCODE, 10, 5)
+data <- subset(data, Direction == 'both')
+data$Time <- factor(data$Time, levels=c(1,2,4,8,24), labels=c('1h','2h','4h','8h','24h'))
+data$TreatmentLabel <- factor(data$Treatment, levels=c(#{FIGURE_TREATMENT_ORDER.collect{|t| "'#{t}'"} * ','}), labels=c(#{AGS.figure_treatment_levels}))
+data$Genes <- as.numeric(data$Genes)
+#{AGS.figure_treatment_color_scale('fill')}
+ggplot(data, aes(Time, Genes, fill=TreatmentLabel)) + geom_col(position='dodge') +
+  theme_bw() + labs(x='Time point', y='DE genes relative to baseline', fill='Treatment') +
+  theme(legend.position='bottom')
+RCODE
+  end
+
+  dep :interval_de_gene_counts_fc1
+  extension :png
+  task :figure_de_counts_fc1_bar => :binary do
+    counts = step(:interval_de_gene_counts_fc1).load
+    AGS.figure_ggplot(self.tmp_path, counts, <<-RCODE, 10, 5)
+data <- subset(data, Direction == 'both')
+data$Time <- factor(data$Time, levels=c(1,2,4,8,24), labels=c('1h','2h','4h','8h','24h'))
+data$TreatmentLabel <- factor(data$Treatment, levels=c(#{FIGURE_TREATMENT_ORDER.collect{|t| "'#{t}'"} * ','}), labels=c(#{AGS.figure_treatment_levels}))
+data$Genes <- as.numeric(data$Genes)
+#{AGS.figure_treatment_color_scale('fill')}
+ggplot(data, aes(Time, Genes, fill=TreatmentLabel)) + geom_col(position='dodge') +
+  theme_bw() + labs(x='Interval ending at time point', y='Interval DE genes', fill='Treatment') +
+  theme(legend.position='bottom')
+RCODE
+  end
+
+  dep :onset_first_counts
+  extension :png
+  task :figure_dynamic_onset_first_bar => :binary do
+    tsv = step(:onset_first_counts).load
+    AGS.figure_ggplot(self.tmp_path, tsv, <<-RCODE, 10, 5)
+data <- subset(data, Direction != 'both')
+data$Time <- factor(data$Time, levels=c(1,2,4,8,24), labels=c('1h','2h','4h','8h','24h'))
+data$TreatmentLabel <- factor(data$Treatment, levels=c(#{FIGURE_TREATMENT_ORDER.collect{|t| "'#{t}'"} * ','}), labels=c(#{AGS.figure_treatment_levels}))
+data$Direction <- factor(data$Direction, levels=c('up','down'))
+data$Genes <- as.numeric(data$Genes)
+#{AGS.figure_direction_color_scale('fill')}
+ggplot(data, aes(Time, Genes, fill=Direction)) + geom_col() + facet_wrap(~TreatmentLabel, nrow=2) +
+  theme_bw() + labs(x='First onset time', y='Genes', fill='Direction') + theme(legend.position='bottom')
+RCODE
+  end
+
+  dep :onset_episode_counts
+  extension :png
+  task :figure_dynamic_onset_episode_bar => :binary do
+    tsv = step(:onset_episode_counts).load
+    AGS.figure_ggplot(self.tmp_path, tsv, <<-RCODE, 10, 5)
+data <- subset(data, Direction != 'both')
+data$Time <- factor(data$Time, levels=c(1,2,4,8,24), labels=c('1h','2h','4h','8h','24h'))
+data$TreatmentLabel <- factor(data$Treatment, levels=c(#{FIGURE_TREATMENT_ORDER.collect{|t| "'#{t}'"} * ','}), labels=c(#{AGS.figure_treatment_levels}))
+data$Direction <- factor(data$Direction, levels=c('up','down'))
+data$Episodes <- as.numeric(data$Episodes)
+#{AGS.figure_direction_color_scale('fill')}
+ggplot(data, aes(Time, Episodes, fill=Direction)) + geom_col() + facet_wrap(~TreatmentLabel, nrow=2) +
+  theme_bw() + labs(x='Onset episode time', y='Episodes', fill='Direction') + theme(legend.position='bottom')
+RCODE
+  end
+
   dep :figure_04c_onset_switch_summary
-  dep :figure_04d_onset_example_profiles
-  dep :figure_05a_fc1_de_direction_counts
+  extension :png
+  task :figure_dynamic_onset_switch_summary => :binary do
+    Open.cp step(:figure_04c_onset_switch_summary).path, self.tmp_path
+    nil
+  end
+
   dep :figure_05b_fc1_onset_relationship
-  dep :figure_05e_fc1_onset_8h_focus
-  dep :figure_06a_go_top_terms_dotplot
-  dep :figure_06b_go_term_frequency
-  dep :figure_06c_go_theme_heatmap
-  dep :figure_06d_go_selected_terms
-  dep :figure_07b_tf_activity_call_counts
-  dep :figure_07c_tf_activity_pca
-  dep :figure_07d_tf_activity_sign_balance
-  dep :figure_08a_tf_report_card_example
-  dep :figure_08b_tf_targets_dynamic_highlight
-  dep :figure_08c_tf_target_edge_consistency
-  dep :figure_09_tf_activity_heatmap, :scheme => 'dynamic', :normalization => 'raw', :max_abs => 50.0
-  dep :figure_09_tf_activity_heatmap, :scheme => 'dynamic', :normalization => 'row_zscore', :max_abs => 3.0
-  dep :figure_09_tf_activity_heatmap, :scheme => 'dynamic', :normalization => 'column_zscore', :max_abs => 3.0
-  dep :figure_09d_tf_context_correlation
-  dep :figure_10c_tf_heatmap_columns_clustered, :scheme => 'dynamic'
-  dep :figure_10d_tf_context_similarity_heatmap
-  dep :figure_10e_tf_activity_call_burden
-  dep :figure_11b_combination_category_counts
-  dep :figure_11c_combination_category_heatmap
-  dep :figure_11d_combination_category_fraction
-  dep :figure_11f_combination_earlier_counts
-  dep :figure_12a_neko_match_odds
-  dep :figure_12b_neko_dynamic_vs_nondynamic_odds
-  dep :figure_12c_neko_match_fraction
+  extension :png
+  task :figure_dynamic_vs_interval_onset_relationship => :binary do
+    Open.cp step(:figure_05b_fc1_onset_relationship).path, self.tmp_path
+    nil
+  end
+
+  dep :goslim_bp_top_terms
+  input :max_terms, :integer, 'Maximum GO-Slim terms to show', 28
+  extension :png
+  task :figure_goslim_top_terms_dotplot => :binary do |max_terms|
+    top = step(:goslim_bp_top_terms).load
+    idx = Hash[top.fields.each_with_index.to_a]
+    term_score = Hash.new(0.0)
+    rows = []
+    top.through do |id, values|
+      name = values[idx['SlimName']].to_s
+      q = AGS.figure_safe_float(values[idx['AdjustedPValue']], 1.0)
+      next if q <= 0 || q > 0.05
+      score = -Math.log10(q)
+      term_score[name] = [term_score[name], score].max
+      rows << [id, values[idx['Treatment']], values[idx['Time']], values[idx['Direction']], name, values[idx['IntersectionSize']], score]
+    end
+    selected = term_score.keys.sort_by{|term| [-term_score[term], term] }.first(max_terms)
+    rows = rows.select{|row| selected.include?(row[4]) }
+    plot_tsv = AGS.figure_build_tsv(rows.each_with_index.collect{|row,i| [i+1] + row[1..-1] }, 'ID', %w(Treatment Time Direction Term Intersection NegLogQ))
+    AGS.figure_ggplot(self.tmp_path, plot_tsv, <<-RCODE, 14, 8)
+data$Time <- factor(data$Time, levels=c(1,2,4,8,24), labels=c('1h','2h','4h','8h','24h'))
+data$Treatment <- factor(data$Treatment, levels=c(#{FIGURE_TREATMENT_ORDER.collect{|t| "'#{t}'"} * ','}), labels=c(#{AGS.figure_treatment_levels}))
+data$Direction <- factor(data$Direction, levels=c('up','down','both'))
+data$Intersection <- as.numeric(data$Intersection)
+data$NegLogQ <- as.numeric(data$NegLogQ)
+term_order <- names(sort(tapply(data$NegLogQ, data$Term, max), decreasing=FALSE))
+data$Term <- factor(data$Term, levels=term_order)
+data$Context <- factor(paste(data$Treatment, data$Time, data$Direction, sep=' '), levels=unique(paste(data$Treatment, data$Time, data$Direction, sep=' ')))
+ggplot(data, aes(Context, Term, size=Intersection, color=NegLogQ)) + geom_point(alpha=0.85) +
+  scale_color_viridis_c(name='-log10(FDR)') + scale_size_continuous(name='Genes', range=c(1,6)) +
+  theme_bw() + labs(x='', y='GO-Slim biological process') +
+  theme(axis.text.x=element_text(angle=90, hjust=1, vjust=0.5, size=6), axis.text.y=element_text(size=7))
+RCODE
+  end
+
+  dep :goslim_bp_enrichment
+  input :selected_terms, :array, 'GO-Slim terms to show', ['DNA-templated transcription', 'regulation of DNA-templated transcription', 'ribosome biogenesis', 'tRNA metabolic process', 'mRNA metabolic process', 'protein folding', 'mitochondrion organization', 'generation of precursor metabolites and energy', 'mitotic cell cycle', 'DNA replication', 'DNA repair', 'DNA recombination', 'chromosome segregation', 'lipid metabolic process', 'transmembrane transport', 'amino acid metabolic process', 'cell adhesion', 'signaling', 'cell differentiation', 'autophagy', 'extracellular matrix organization', 'cell motility']
+  input :qvalue_cutoff, :float, 'Adjusted p-value cutoff for display', 0.05
+  extension :png
+  task :figure_goslim_selected_process_heatmap => :binary do |selected_terms, qvalue_cutoff|
+    enrichment = step(:goslim_bp_enrichment).load
+    idx = Hash[enrichment.fields.each_with_index.to_a]
+    rows = []
+    id = 0
+    enrichment.through do |row_id, values|
+      name = values[idx['SlimName']].to_s
+      next unless selected_terms.include?(name)
+      q = AGS.figure_safe_float(values[idx['AdjustedPValue']], 1.0)
+      next if q > qvalue_cutoff
+      id += 1
+      rows << [id, values[idx['Treatment']], values[idx['Time']], values[idx['Direction']], name, -Math.log10([q, 1e-300].max)]
+    end
+    plot_tsv = AGS.figure_build_tsv(rows, 'ID', %w(Treatment Time Direction Term Score))
+    AGS.figure_ggplot(self.tmp_path, plot_tsv, <<-RCODE, 14, 7)
+data$Time <- factor(data$Time, levels=c(1,2,4,8,24), labels=c('1h','2h','4h','8h','24h'))
+data$Treatment <- factor(data$Treatment, levels=c(#{FIGURE_TREATMENT_ORDER.collect{|t| "'#{t}'"} * ','}), labels=c(#{AGS.figure_treatment_levels}))
+data$Direction <- factor(data$Direction, levels=c('up','down','both'))
+data$Score <- as.numeric(data$Score)
+data$Term <- factor(data$Term, levels=rev(c(#{selected_terms.collect{|t| "'#{t}'"} * ','})))
+data$Context <- factor(paste(data$Treatment, data$Time, data$Direction, sep=' '), levels=unique(paste(data$Treatment, data$Time, data$Direction, sep=' ')))
+ggplot(data, aes(Context, Term, fill=Score)) + geom_tile(color='white') +
+  scale_fill_viridis_c(name='-log10(FDR)', na.value='white') + theme_bw() + labs(x='', y='') +
+  theme(axis.text.x=element_text(angle=90, hjust=1, vjust=0.5, size=6), panel.grid=element_blank())
+RCODE
+  end
+
+  dep :tf_activity_call_counts_by_scheme, :scheme => 'dynamic'
+  extension :png
+  task :figure_tf_activity_counts_bar => :binary do
+    tsv = step(:tf_activity_call_counts_by_scheme).load
+    AGS.figure_ggplot(self.tmp_path, tsv, <<-RCODE, 10, 5)
+data <- subset(data, Sign != 'both')
+data$Time <- factor(data$Time, levels=c(1,2,4,8,24), labels=c('1h','2h','4h','8h','24h'))
+data$TreatmentLabel <- factor(data$Treatment, levels=c(#{FIGURE_TREATMENT_ORDER.collect{|t| "'#{t}'"} * ','}), labels=c(#{AGS.figure_treatment_levels}))
+data$TFActivityCalls <- as.numeric(data$TFActivityCalls)
+data$SignedCalls <- ifelse(data$Sign == 'negative', -data$TFActivityCalls, data$TFActivityCalls)
+ggplot(data, aes(TreatmentLabel, SignedCalls, fill=Sign)) + geom_col() + facet_wrap(~Time, nrow=1, scales='free_y') +
+  scale_fill_manual(values=c('positive'='#D73027','negative'='#4575B4')) + coord_flip() +
+  theme_bw() + labs(x='', y='TF activity-change calls', fill='Activity sign') + theme(legend.position='bottom')
+RCODE
+  end
+
+  dep :tf_activity_heatmap_matrix, :scheme => 'dynamic', :normalization => 'raw'
+  extension :png
+  task :figure_tf_activity_pca_by_treatment => :binary do
+    matrix = step(:tf_activity_heatmap_matrix).load
+    fields = AGS.figure_tf_context_fields(matrix)
+    data_tsv = matrix.reorder('Associated Gene Name', fields)
+    AGS.figure_ggplot(self.tmp_path, data_tsv, <<-RCODE, 7, 5.5)
+mat <- data[, c(#{fields.collect{|f| "'#{f}'"} * ', '}), drop=FALSE]
+mat[] <- lapply(mat, as.numeric)
+mat[is.na(mat)] <- 0
+mat <- t(as.matrix(mat))
+keep <- apply(mat, 2, sd) > 0
+mat <- mat[, keep, drop=FALSE]
+pca <- prcomp(mat, center=TRUE, scale.=TRUE)
+plot_df <- data.frame(Context=rownames(mat), PC1=pca$x[,1], PC2=pca$x[,2], stringsAsFactors=FALSE)
+plot_df$Treatment <- sub('-T[0-9]+$', '', plot_df$Context)
+plot_df$Time <- as.numeric(sub('.*-T', '', plot_df$Context))
+plot_df$TreatmentLabel <- factor(plot_df$Treatment, levels=c(#{FIGURE_TREATMENT_ORDER.collect{|t| "'#{t}'"} * ','}), labels=c(#{AGS.figure_treatment_levels}))
+var_exp <- round(100 * (pca$sdev^2 / sum(pca$sdev^2)), 1)
+#{AGS.figure_treatment_color_scale('color')}
+ggplot(plot_df, aes(PC1, PC2, color=TreatmentLabel)) + geom_point(aes(size=Time), alpha=0.9) +
+  scale_size_continuous(breaks=c(1,2,4,8,24), name='Time') + theme_bw() +
+  labs(x=paste0('PC1 (', var_exp[1], '%)'), y=paste0('PC2 (', var_exp[2], '%)'), color='Treatment') + theme(legend.position='bottom')
+RCODE
+  end
+
+  dep :tf_activity_call_counts_by_scheme, :scheme => 'dynamic'
+  extension :png
+  task :figure_tf_activity_sign_balance_bar => :binary do
+    tsv = step(:tf_activity_call_counts_by_scheme).load
+    AGS.figure_ggplot(self.tmp_path, tsv, <<-RCODE, 9, 5)
+data <- subset(data, Sign != 'both')
+data$Time <- factor(data$Time, levels=c(1,2,4,8,24), labels=c('1h','2h','4h','8h','24h'))
+data$TreatmentLabel <- factor(data$Treatment, levels=c(#{FIGURE_TREATMENT_ORDER.collect{|t| "'#{t}'"} * ','}), labels=c(#{AGS.figure_treatment_levels}))
+data$TFActivityCalls <- as.numeric(data$TFActivityCalls)
+ggplot(data, aes(Time, TFActivityCalls, fill=Sign)) + geom_col(position='fill') + facet_wrap(~TreatmentLabel, nrow=2) +
+  scale_fill_manual(values=c('positive'='#D73027','negative'='#4575B4')) + theme_bw() +
+  labs(x='Time point', y='Fraction of TF activity calls', fill='Sign') + theme(legend.position='bottom')
+RCODE
+  end
+
+  input :scheme, :select, 'TF prediction scheme', 'dynamic', :select_options => %w(dynamic non-dynamic)
+  input :normalization, :select, 'Normalization', 'row_zscore', :select_options => %w(raw row_zscore column_zscore)
+  input :max_abs, :float, 'Maximum absolute value for color scale', 3.0
+  input :cluster_columns, :boolean, 'Cluster columns and show column dendrogram', false
+  input :show_tf_labels, :boolean, 'Show TF labels', false
+  dep :tf_activity_heatmap_matrix, :scheme => :placeholder, :normalization => :placeholder do |jobname, options|
+    { :scheme => options[:scheme], :normalization => options[:normalization] }
+  end
+  extension :png
+  task :figure_tf_activity_heatmap_dendrogram => :binary do |scheme, normalization, max_abs, cluster_columns, show_tf_labels|
+    matrix = step(:tf_activity_heatmap_matrix).load
+    fields = AGS.figure_tf_context_fields(matrix)
+    data_tsv = matrix.reorder('Associated Gene Name', fields)
+    dendrogram = cluster_columns ? 'both' : 'row'
+    colv = cluster_columns ? 'TRUE' : 'FALSE'
+    labrow = show_tf_labels ? 'rownames(mat)' : 'rep("", nrow(mat))'
+    AGS.figure_r_plot(self.tmp_path, data_tsv, <<-RCODE, 1400, 1200)
+rbbt.require('gplots')
+mat <- data[, c(#{fields.collect{|f| "'#{f}'"} * ', '}), drop=FALSE]
+mat[] <- lapply(mat, as.numeric)
+mat[is.na(mat)] <- 0
+mat <- as.matrix(mat)
+rownames(mat) <- rownames(data)
+mat[mat > #{max_abs}] <- #{max_abs}
+mat[mat < -#{max_abs}] <- -#{max_abs}
+colnames(mat) <- gsub('INT_FiveZ_PI', '5Z+PI', colnames(mat))
+colnames(mat) <- gsub('INT_PD_PI', 'PD+PI', colnames(mat))
+colnames(mat) <- gsub('FiveZ', '5Z', colnames(mat))
+heatmap.2(mat, trace='none', col=colorRampPalette(c('#4575B4','white','#D73027'))(101),
+          dendrogram='#{dendrogram}', Colv=#{colv}, density.info='none', key.title='activity',
+          symbreaks=FALSE, labRow=#{labrow}, margins=c(9,4), cexCol=0.65, cexRow=0.35)
+RCODE
+  end
+
+  dep :tf_predictions
+  input :combination, :select, 'Combination treatment', 'INT_FiveZ_PI', :select_options => %w(INT_FiveZ_PI INT_PD_PI)
+  input :time_point, :integer, 'Time point', 2
+  input :sign_mode, :select, 'Activity sign subset', 'all', :select_options => %w(all positive negative)
+  extension :png
+  task :figure_combination_tf_activity_upset_bar => :binary do |combination, time_point, sign_mode|
+    predictions = step(:tf_predictions).load
+    components = combination == 'INT_PD_PI' ? ['PI', 'PD'] : ['PI', 'FiveZ']
+    labels = components + [combination]
+    sets = Hash.new{|h,k| h[k] = [] }
+    predictions.through do |tf, values|
+      values = NamedArray.setup(values, predictions.fields)
+      labels.each do |treatment|
+        field = "#{treatment}-T#{time_point}"
+        next unless predictions.fields.include?(field)
+        value = AGS.figure_safe_float(values[field], 0.0)
+        active = case sign_mode
+                 when 'positive' then value > 0
+                 when 'negative' then value < 0
+                 else value != 0
+                 end
+        sets[treatment] << tf if active
+      end
+    end
+    counts = Hash.new(0)
+    all_tfs = labels.collect{|l| sets[l] }.flatten.uniq
+    all_tfs.each do |tf|
+      pattern = labels.collect{|l| sets[l].include?(tf) ? '1' : '0' } * ''
+      counts[pattern] += 1
+    end
+    rows = []
+    counts.keys.sort_by{|pattern| [-counts[pattern], pattern] }.each_with_index do |pattern, i|
+      display = labels.each_with_index.collect{|l,j| pattern[j] == '1' ? AGS.figure_treatment_label(l) : nil }.compact * ' & '
+      display = 'none' if display.empty?
+      rows << [i + 1, pattern, display, counts[pattern]]
+    end
+    plot_tsv = AGS.figure_build_tsv(rows, 'ID', %w(Pattern Display Count))
+    title = "#{AGS.figure_treatment_label(combination)} T#{time_point} #{sign_mode} TF activity exact intersections"
+    AGS.figure_ggplot(self.tmp_path, plot_tsv, <<-RCODE, 8, 5)
+data$Count <- as.numeric(data$Count)
+data <- data[order(data$Count, decreasing=TRUE),]
+data$Display <- factor(data$Display, levels=rev(data$Display))
+ggplot(data, aes(Display, Count)) + geom_col(fill='grey35') + coord_flip() +
+  theme_bw() + labs(x='Exact active-TF intersection', y='TFs', title='#{title}')
+RCODE
+  end
+
+  dep :combination_tf_category_counts
+  extension :png
+  task :figure_combination_category_counts_bar => :binary do
+    tsv = step(:combination_tf_category_counts).load
+    AGS.figure_ggplot(self.tmp_path, tsv, <<-RCODE, 10, 5)
+data$Time <- factor(data$Time, levels=c(1,2,4,8,24), labels=c('1h','2h','4h','8h','24h'))
+data$CombinationLabel <- factor(data$Combination, levels=c('INT_FiveZ_PI','INT_PD_PI'), labels=c('5Z+PI','PD+PI'))
+data$TFActivityCalls <- as.numeric(data$TFActivityCalls)
+data$CategoryLabel <- factor(data$Category, levels=c(#{FIGURE_COMBINATION_CATEGORY_LABELS.keys.collect{|c| "'#{c}'"} * ','}), labels=c(#{FIGURE_COMBINATION_CATEGORY_LABELS.values.collect{|c| "'#{c}'"} * ','}))
+ggplot(data, aes(Time, TFActivityCalls, fill=CategoryLabel)) + geom_col() + facet_wrap(~CombinationLabel, nrow=1) +
+  scale_fill_brewer(palette='Set3') + theme_bw() + labs(x='Time point', y='TF activity calls in combination', fill='Category') +
+  theme(legend.position='bottom', legend.text=element_text(size=7))
+RCODE
+  end
+
+  dep :tf_predictions
+  input :time_point, :integer, 'Early time point', 1
+  extension :png
+  task :figure_opposite_early_single_agent_tf_signs => :binary do |time_point|
+    predictions = step(:tf_predictions).load
+    pairs = [['PI','PD'], ['PI','FiveZ'], ['PD','FiveZ']]
+    counts = Hash.new(0)
+    predictions.through do |tf, values|
+      values = NamedArray.setup(values, predictions.fields)
+      pairs.each do |a,b|
+        fa = "#{a}-T#{time_point}"; fb = "#{b}-T#{time_point}"
+        next unless predictions.fields.include?(fa) && predictions.fields.include?(fb)
+        va = AGS.figure_safe_float(values[fa], 0.0); vb = AGS.figure_safe_float(values[fb], 0.0)
+        next if va == 0 && vb == 0
+        category = if va != 0 && vb != 0
+                     va * vb > 0 ? 'shared same sign' : 'shared opposite sign'
+                   elsif va != 0
+                     "#{a} only"
+                   else
+                     "#{b} only"
+                   end
+        counts[["#{AGS.figure_treatment_label(a)} vs #{AGS.figure_treatment_label(b)}", category]] += 1
+      end
+    end
+    rows = []
+    counts.each_with_index{|((pair, category), count), i| rows << [i + 1, pair, category, count] }
+    plot_tsv = AGS.figure_build_tsv(rows, 'ID', %w(Pair Category Count))
+    AGS.figure_ggplot(self.tmp_path, plot_tsv, <<-RCODE, 8, 5)
+data$Count <- as.numeric(data$Count)
+ggplot(data, aes(Pair, Count, fill=Category)) + geom_col(position='stack') + coord_flip() +
+  scale_fill_brewer(palette='Set2') + theme_bw() + labs(x='', y='TFs', fill='Sign-aware overlap', title='Early single-agent TF signs at T#{time_point}') +
+  theme(legend.position='bottom')
+RCODE
+  end
+
+  dep :neko_dynamic_non_dynamic_summary
+  extension :png
+  task :figure_neko_match_fraction_bar => :binary do
+    tsv = step(:neko_dynamic_non_dynamic_summary).load
+    AGS.figure_ggplot(self.tmp_path, tsv, <<-RCODE, 9, 5)
+data <- subset(data, Vetting == 'none')
+data$MatchFraction <- as.numeric(data$MatchFraction)
+data$Target <- factor(data$Target, levels=c('T1','T2','relaxed'))
+ggplot(data, aes(Target, MatchFraction, fill=Scheme)) + geom_col(position='dodge') + facet_wrap(~Treatment) +
+  scale_fill_manual(values=c('dynamic'='#D73027','non-dynamic'='#4575B4')) + ylim(0,1) +
+  theme_bw() + labs(x='Benchmark evaluation', y='Match fraction', fill='Scheme') + theme(legend.position='bottom')
+RCODE
+  end
+
   dep :figure_12d_neko_counts
-  dep :figure_13b_self_consistency_match_odds
+  extension :png
+  task :figure_neko_counts_bar => :binary do
+    Open.cp step(:figure_12d_neko_counts).path, self.tmp_path
+    nil
+  end
+
+  dep :self_consistency_dynamic_non_dynamic_summary
+  extension :png
+  task :figure_self_consistency_match_fraction_bar => :binary do
+    tsv = step(:self_consistency_dynamic_non_dynamic_summary).load
+    AGS.figure_ggplot(self.tmp_path, tsv, <<-RCODE, 10, 5)
+data <- subset(data, Vetting == 'none')
+data$Time <- factor(data$Time, levels=c(1,2,4,8,24), labels=c('1h','2h','4h','8h','24h'))
+data$TreatmentLabel <- factor(data$Treatment, levels=c(#{FIGURE_TREATMENT_ORDER.collect{|t| "'#{t}'"} * ','}), labels=c(#{AGS.figure_treatment_levels}))
+data$MatchFraction <- as.numeric(data$MatchFraction)
+ggplot(data, aes(Time, MatchFraction, fill=Scheme)) + geom_col(position='dodge') + facet_wrap(~TreatmentLabel, nrow=2) +
+  scale_fill_manual(values=c('dynamic'='#D73027','non-dynamic'='#4575B4')) + ylim(0,1) +
+  theme_bw() + labs(x='Time point', y='Self-consistency match fraction', fill='Scheme') + theme(legend.position='bottom')
+RCODE
+  end
+
   dep :figure_13c_self_consistency_counts
-  dep :figure_13d_self_consistency_dynamic_vs_nondynamic_odds
-  dep :figure_13e_self_consistency_match_fraction
-  task :figures_current => :array do
+  extension :png
+  task :figure_self_consistency_counts_bar => :binary do
+    Open.cp step(:figure_13c_self_consistency_counts).path, self.tmp_path
+    nil
+  end
+
+  dep :tf_predictions, :scheme => 'dynamic'
+  dep :tf_predictions, :scheme => 'non-dynamic'
+  extension :png
+  task :figure_dynamic_vs_nondynamic_earliest_detection => :binary do
+    dyn = dependencies.find{|d| d.recursive_inputs[:scheme].to_s == 'dynamic' }.load
+    nd = dependencies.find{|d| d.recursive_inputs[:scheme].to_s == 'non-dynamic' }.load
+    maps = {}
+    {'dynamic' => dyn, 'non-dynamic' => nd}.each do |scheme_name, tsv|
+      map = {}
+      tsv.through do |tf, values|
+        values = NamedArray.setup(values, tsv.fields)
+        FIGURE_TREATMENT_ORDER.each do |treatment|
+          %w(positive negative).each do |sign|
+            FIGURE_TIME_POINTS.each do |time|
+              field = "#{treatment}-T#{time}"
+              next unless tsv.fields.include?(field)
+              value = AGS.figure_safe_float(values[field], 0.0)
+              next unless (sign == 'positive' && value > 0) || (sign == 'negative' && value < 0)
+              map[[tf, treatment, sign]] ||= time
+            end
+          end
+        end
+      end
+      maps[scheme_name] = map
+    end
+    counts = Hash.new(0)
+    (maps['dynamic'].keys | maps['non-dynamic'].keys).each do |tf,treatment,sign|
+      d = maps['dynamic'][[tf,treatment,sign]]
+      n = maps['non-dynamic'][[tf,treatment,sign]]
+      category = if d && n
+                   FIGURE_TIME_POINTS.index(d) < FIGURE_TIME_POINTS.index(n) ? 'dynamic earlier' : (FIGURE_TIME_POINTS.index(d) > FIGURE_TIME_POINTS.index(n) ? 'non-dynamic earlier' : 'same time')
+                 elsif d
+                   'dynamic only'
+                 else
+                   'non-dynamic only'
+                 end
+      counts[[treatment, sign, category]] += 1
+    end
+    rows=[]; counts.each_with_index{|((treatment, sign, category), count), i| rows << [i+1, treatment, sign, category, count] }
+    plot_tsv=AGS.figure_build_tsv(rows, 'ID', %w(Treatment Sign Category Count))
+    AGS.figure_ggplot(self.tmp_path, plot_tsv, <<-RCODE, 10, 5)
+data$TreatmentLabel <- factor(data$Treatment, levels=c(#{FIGURE_TREATMENT_ORDER.collect{|t| "'#{t}'"} * ','}), labels=c(#{AGS.figure_treatment_levels}))
+data$Count <- as.numeric(data$Count)
+ggplot(data, aes(TreatmentLabel, Count, fill=Category)) + geom_col() + facet_wrap(~Sign, nrow=1) +
+  scale_fill_brewer(palette='Set2') + coord_flip() + theme_bw() + labs(x='', y='TF-treatment-sign calls', fill='Earliest detection') + theme(legend.position='bottom')
+RCODE
+  end
+
+  dep :tf_predictions, :scheme => 'dynamic'
+  dep :tf_predictions, :scheme => 'non-dynamic'
+  extension :png
+  task :figure_dynamic_vs_nondynamic_persistence => :binary do
+    rows=[]; id=0
+    dependencies.each do |dep|
+      scheme_name = dep.recursive_inputs[:scheme].to_s
+      tsv = dep.load
+      tsv.through do |tf, values|
+        values = NamedArray.setup(values, tsv.fields)
+        FIGURE_TREATMENT_ORDER.each do |treatment|
+          %w(positive negative).each do |sign|
+            count = 0
+            FIGURE_TIME_POINTS.each do |time|
+              field = "#{treatment}-T#{time}"
+              next unless tsv.fields.include?(field)
+              value = AGS.figure_safe_float(values[field], 0.0)
+              count += 1 if (sign == 'positive' && value > 0) || (sign == 'negative' && value < 0)
+            end
+            next if count == 0
+            id += 1
+            rows << [id, scheme_name, treatment, sign, count]
+          end
+        end
+      end
+    end
+    plot_tsv=AGS.figure_build_tsv(rows, 'ID', %w(Scheme Treatment Sign ActiveTimepoints))
+    AGS.figure_ggplot(self.tmp_path, plot_tsv, <<-RCODE, 9, 5)
+data$ActiveTimepoints <- as.numeric(data$ActiveTimepoints)
+data$TreatmentLabel <- factor(data$Treatment, levels=c(#{FIGURE_TREATMENT_ORDER.collect{|t| "'#{t}'"} * ','}), labels=c(#{AGS.figure_treatment_levels}))
+ggplot(data, aes(factor(ActiveTimepoints), fill=Scheme)) + geom_bar(position='dodge') + facet_grid(Sign ~ TreatmentLabel) +
+  scale_fill_manual(values=c('dynamic'='#D73027','non-dynamic'='#4575B4')) + theme_bw() +
+  labs(x='Active sampled windows per TF-treatment-sign', y='Count', fill='Scheme') + theme(axis.text.x=element_text(angle=45, hjust=1), legend.position='bottom')
+RCODE
+  end
+
+  dep :results_table_sequence_edge_counts
+  extension :png
+  task :figure_sequence_edge_counts_bar => :binary do
+    tsv = step(:results_table_sequence_edge_counts).load
+    rows = []
+    id = 0
+    tsv.through do |treatment, values|
+      values = NamedArray.setup(values, tsv.fields)
+      id += 1
+      rows << [id, treatment, 'all sequence edges', AGS.figure_safe_int(values['Total sequence edges'], 0)]
+      id += 1
+      rows << [id, treatment, 'both TFs self-consistent', AGS.figure_safe_int(values['Edges with both TFs self-consistent'], 0)]
+    end
+    plot_tsv = AGS.figure_build_tsv(rows, 'ID', %w(Treatment Class Count))
+    AGS.figure_ggplot(self.tmp_path, plot_tsv, <<-RCODE, 8, 5)
+data$Count <- as.numeric(data$Count)
+data$TreatmentLabel <- factor(data$Treatment, levels=c(#{FIGURE_TREATMENT_ORDER.collect{|t| "'#{t}'"} * ','}), labels=c(#{AGS.figure_treatment_levels}))
+ggplot(data, aes(TreatmentLabel, Count, fill=Class)) + geom_col(position='dodge') + coord_flip() +
+  scale_fill_manual(values=c('all sequence edges'='grey60','both TFs self-consistent'='#1B7837')) +
+  theme_bw() + labs(x='', y='Candidate TF-to-TF edges', fill='Sequence class') + theme(legend.position='bottom')
+RCODE
+  end
+
+  extension :png
+  task :figure_three_layer_interpretation_scaffold => :binary do
+    tsv = AGS.figure_build_tsv([['one', 1]], 'ID', ['Value'])
+    AGS.figure_ggplot(self.tmp_path, tsv, <<-RCODE, 10, 5)
+ggplot(data.frame(x=1,y=1), aes(x,y)) + xlim(0,10) + ylim(0,5) +
+  annotate('rect', xmin=0.6, xmax=3.0, ymin=3.2, ymax=4.4, fill='#DDEBF7', color='grey30') +
+  annotate('rect', xmin=3.8, xmax=6.2, ymin=3.2, ymax=4.4, fill='#FFF2CC', color='grey30') +
+  annotate('rect', xmin=7.0, xmax=9.4, ymin=3.2, ymax=4.4, fill='#E2F0D9', color='grey30') +
+  annotate('text', x=1.8, y=3.8, label='Signaling\ncascade states', size=4) +
+  annotate('text', x=5.0, y=3.8, label='TF activity-change\nscoreboards', size=4) +
+  annotate('text', x=8.2, y=3.8, label='GO-Slim process\nscoreboards', size=4) +
+  annotate('segment', x=3.05, xend=3.75, y=3.8, yend=3.8, arrow=arrow(length=unit(0.15,'inches'))) +
+  annotate('segment', x=6.25, xend=6.95, y=3.8, yend=3.8, arrow=arrow(length=unit(0.15,'inches'))) +
+  annotate('rect', xmin=1.2, xmax=8.8, ymin=1.0, ymax=2.2, fill='#FCE4D6', color='grey30') +
+  annotate('text', x=5.0, y=1.6, label='Structured mechanistic narrative: time-resolved, evidence-linked, and testable', size=4) +
+  annotate('segment', x=5.0, xend=5.0, y=3.15, yend=2.25, arrow=arrow(length=unit(0.15,'inches'))) +
+  theme_void()
+RCODE
+  end
+
+  #############################################################################
+  # Convenience collectors for the manuscript figure placeholders
+  #############################################################################
+
+  dep :figure_overall_intermediate_phenotypes
+  dep :figure_overall_dynamic_workflow
+  dep :figure_mrna_pca_by_treatment
+  dep :figure_mrna_pca_by_time
+  dep :figure_mrna_context_distance_clustered
+  dep :figure_de_counts_fc0_bar
+  dep :figure_de_counts_fc1_bar
+  dep :figure_dynamic_onset_first_bar
+  dep :figure_dynamic_onset_episode_bar
+  dep :figure_dynamic_onset_switch_summary
+  dep :figure_dynamic_vs_interval_onset_relationship
+  dep :figure_goslim_top_terms_dotplot
+  dep :figure_goslim_selected_process_heatmap
+  dep :figure_tf_activity_counts_bar
+  dep :figure_tf_activity_pca_by_treatment
+  dep :figure_tf_activity_sign_balance_bar
+  dep :figure_tf_activity_heatmap_dendrogram, :scheme => 'dynamic', :normalization => 'raw', :max_abs => 50.0, :cluster_columns => false
+  dep :figure_tf_activity_heatmap_dendrogram, :scheme => 'dynamic', :normalization => 'row_zscore', :max_abs => 3.0, :cluster_columns => false
+  dep :figure_tf_activity_heatmap_dendrogram, :scheme => 'dynamic', :normalization => 'row_zscore', :max_abs => 3.0, :cluster_columns => true
+  dep :figure_combination_tf_activity_upset_bar, :combination => 'INT_FiveZ_PI', :time_point => 2, :sign_mode => 'all'
+  dep :figure_combination_tf_activity_upset_bar, :combination => 'INT_FiveZ_PI', :time_point => 24, :sign_mode => 'all'
+  dep :figure_combination_tf_activity_upset_bar, :combination => 'INT_PD_PI', :time_point => 1, :sign_mode => 'all'
+  dep :figure_combination_tf_activity_upset_bar, :combination => 'INT_PD_PI', :time_point => 24, :sign_mode => 'all'
+  dep :figure_combination_category_counts_bar
+  dep :figure_opposite_early_single_agent_tf_signs, :time_point => 1
+  dep :figure_opposite_early_single_agent_tf_signs, :time_point => 2
+  dep :figure_neko_match_fraction_bar
+  dep :figure_neko_counts_bar
+  dep :figure_self_consistency_match_fraction_bar
+  dep :figure_self_consistency_counts_bar
+  dep :figure_dynamic_vs_nondynamic_earliest_detection
+  dep :figure_dynamic_vs_nondynamic_persistence
+  dep :figure_sequence_edge_counts_bar
+  dep :figure_three_layer_interpretation_scaffold
+  task :figures_manuscript => :array do
+    require 'fileutils'
+    FileUtils.rm_rf(files_dir) if File.directory?(files_dir)
+    FileUtils.mkdir_p(files_dir)
     dependencies.each do |dep|
       inputs = dep.recursive_inputs
+      task_name = dep.task_name.to_s
       tags = []
-      tags << inputs[:scheme] if inputs[:scheme] && ! inputs[:scheme].to_s.empty?
-      tags << inputs[:normalization] if inputs[:normalization] && ! inputs[:normalization].to_s.empty?
-      name = ([dep.task_name.to_s] + tags).compact * '-'
+      if task_name == 'figure_tf_activity_heatmap_dendrogram'
+        tags << inputs[:scheme]
+        tags << inputs[:normalization]
+        tags << ('columns_clustered' if inputs[:cluster_columns].to_s == 'true')
+      elsif task_name == 'figure_combination_tf_activity_upset_bar'
+        tags << inputs[:combination]
+        tags << "T#{inputs[:time_point]}"
+        tags << inputs[:sign_mode]
+      elsif task_name == 'figure_opposite_early_single_agent_tf_signs'
+        tags << "T#{inputs[:time_point]}"
+      end
+      name = ([task_name.sub(/^figure_/, '')] + tags.compact.collect(&:to_s)) * '-'
       target = file(name + '.png')
       Open.cp dep.path, target
     end
     files
+  end
+
+  dep :figures_manuscript
+  task :figures_current => :array do
+    step(:figures_manuscript).load
   end
 
 end
