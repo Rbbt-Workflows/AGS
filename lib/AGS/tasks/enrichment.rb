@@ -903,17 +903,13 @@ module AGS
     tsv
   end
 
-  input :source, :select, 'TF regulatory enrichment source to reduce', 'hallmark', :select_options => %w(hallmark goslim)
+  dep :tf_regulatory_hallmark_enrichment
   input :adjusted_pvalue_threshold, :float, 'Adjusted p-value threshold', 0.05
   input :overlap_method, :select, 'Overlap score used for redundancy filtering', 'overlap_coefficient', :select_options => %w(overlap_coefficient jaccard)
   input :overlap_threshold, :float, 'Remove lower-ranked terms with overlap at or above this value', 0.5
-  dep :tf_regulatory_hallmark_enrichment
-  dep :tf_regulatory_goslim_bp_enrichment
-  task :reduced_tf_regulatory_enrichment => :tsv do |source, adjusted_pvalue_threshold, overlap_method, overlap_threshold|
-    table = source.to_s == 'goslim' ? step(:tf_regulatory_goslim_bp_enrichment).load : step(:tf_regulatory_hallmark_enrichment).load
+  task :reduced_tf_regulatory_hallmark_enrichment => :tsv do |adjusted_pvalue_threshold, overlap_method, overlap_threshold|
+    table = step(:tf_regulatory_hallmark_enrichment).load
     idx = Hash[table.fields.each_with_index.to_a]
-    term_field = idx['TermName'] ? 'TermName' : 'SlimName'
-    id_field = idx['TermID'] ? 'TermID' : 'SlimGOID'
     grouped = Hash.new{|h,k| h[k] = [] }
     table.through do |row_id, values|
       qvalue = enrichment_scalar_value(values[idx['AdjustedPValue']]).to_f
@@ -921,8 +917,8 @@ module AGS
       key = [enrichment_scalar_value(values[idx['Treatment']]), enrichment_scalar_value(values[idx['Time']]).to_i, enrichment_scalar_value(values[idx['Sign']])]
       genes = enrichment_scalar_value(values[idx['Genes']]).to_s.split('|').reject{|v| v.empty? }
       grouped[key] << {
-        :id => enrichment_scalar_value(values[idx[id_field]]),
-        :name => enrichment_scalar_value(values[idx[term_field]]),
+        :id => enrichment_scalar_value(values[idx['TermID']]),
+        :name => enrichment_scalar_value(values[idx['TermName']]),
         :qvalue => qvalue,
         :pvalue => enrichment_scalar_value(values[idx['PValue']]).to_f,
         :intersection => enrichment_scalar_value(values[idx['IntersectionSize']]).to_i,
@@ -952,7 +948,132 @@ module AGS
         next if most_similar && max_overlap >= overlap_threshold
         selected << row
         out_id += 1
-        tsv[out_id] = [source, key[0], key[1], key[2], row[:gene_mode], row[:id], row[:name], row[:tf_count], row[:target_count], row[:query_size], row[:term_size], row[:intersection], row[:pvalue], row[:qvalue], most_similar ? most_similar[:name] : nil, max_overlap, row[:genes] * '|']
+        tsv[out_id] = ['hallmark', key[0], key[1], key[2], row[:gene_mode], row[:id], row[:name], row[:tf_count], row[:target_count], row[:query_size], row[:term_size], row[:intersection], row[:pvalue], row[:qvalue], most_similar ? most_similar[:name] : nil, max_overlap, row[:genes] * '|']
+      end
+    end
+    tsv
+  end
+
+  dep :tf_regulatory_goslim_bp_enrichment
+  input :adjusted_pvalue_threshold, :float, 'Adjusted p-value threshold', 0.05
+  input :overlap_method, :select, 'Overlap score used for redundancy filtering', 'overlap_coefficient', :select_options => %w(overlap_coefficient jaccard)
+  input :overlap_threshold, :float, 'Remove lower-ranked terms with overlap at or above this value', 0.5
+  task :reduced_tf_regulatory_goslim_bp_enrichment => :tsv do |adjusted_pvalue_threshold, overlap_method, overlap_threshold|
+    table = step(:tf_regulatory_goslim_bp_enrichment).load
+    idx = Hash[table.fields.each_with_index.to_a]
+    grouped = Hash.new{|h,k| h[k] = [] }
+    table.through do |row_id, values|
+      qvalue = enrichment_scalar_value(values[idx['AdjustedPValue']]).to_f
+      next if qvalue > adjusted_pvalue_threshold
+      key = [enrichment_scalar_value(values[idx['Treatment']]), enrichment_scalar_value(values[idx['Time']]).to_i, enrichment_scalar_value(values[idx['Sign']])]
+      genes = enrichment_scalar_value(values[idx['Genes']]).to_s.split('|').reject{|v| v.empty? }
+      grouped[key] << {
+        :id => enrichment_scalar_value(values[idx['SlimGOID']]),
+        :name => enrichment_scalar_value(values[idx['SlimName']]),
+        :qvalue => qvalue,
+        :pvalue => enrichment_scalar_value(values[idx['PValue']]).to_f,
+        :intersection => enrichment_scalar_value(values[idx['IntersectionSize']]).to_i,
+        :query_size => enrichment_scalar_value(values[idx['QuerySize']]).to_i,
+        :term_size => enrichment_scalar_value(values[idx['TermBackgroundSize']]).to_i,
+        :tf_count => enrichment_scalar_value(values[idx['TFCount']]).to_i,
+        :target_count => enrichment_scalar_value(values[idx['TargetCount']]).to_i,
+        :gene_mode => enrichment_scalar_value(values[idx['GeneMode']]),
+        :genes => genes
+      }
+    end
+    fields = %w(Source Treatment Time Sign GeneMode TermID TermName TFCount TargetCount QuerySize TermBackgroundSize IntersectionSize PValue AdjustedPValue MostSimilarKept MaxOverlap Genes)
+    tsv = TSV.setup({}, :key_field => 'ID', :fields => fields, :type => :list, :namespace => AGS.organism)
+    out_id = 0
+    grouped.keys.sort_by{|treatment,time,sign| [enrichment_treatment_sort_index(treatment), time, sign.to_s] }.each do |key|
+      selected = []
+      grouped[key].sort_by{|row| [row[:qvalue], -row[:intersection], row[:name].to_s] }.each do |row|
+        most_similar = nil
+        max_overlap = 0.0
+        selected.each do |kept|
+          overlap = enrichment_overlap_score(row[:genes], kept[:genes], overlap_method)
+          if overlap > max_overlap
+            max_overlap = overlap
+            most_similar = kept
+          end
+        end
+        next if most_similar && max_overlap >= overlap_threshold
+        selected << row
+        out_id += 1
+        tsv[out_id] = ['goslim', key[0], key[1], key[2], row[:gene_mode], row[:id], row[:name], row[:tf_count], row[:target_count], row[:query_size], row[:term_size], row[:intersection], row[:pvalue], row[:qvalue], most_similar ? most_similar[:name] : nil, max_overlap, row[:genes] * '|']
+      end
+    end
+    tsv
+  end
+
+
+  dep :tf_activity_regulatory_gene_sets
+  dep :regulome
+  dep :gene_goslim_bp_annotations
+  task :tf_regulatory_goslim_bp_annotation_counts => :tsv do
+    require 'set'
+    gene_sets = step(:tf_activity_regulatory_gene_sets).load
+    regulome = step(:regulome).load
+    annotations = step(:gene_goslim_bp_annotations).load
+
+    slim_name_by_id = {}
+    annotations.through do |gene, values|
+      values = NamedArray.setup(values, annotations.fields)
+      ids = enrichment_scalar_value(values['SlimGOIDs']).to_s.split('|').reject{|v| v.empty? }
+      names = enrichment_scalar_value(values['SlimNames']).to_s.split('|')
+      ids.each_with_index{|slim_id, i| slim_name_by_id[slim_id] ||= names[i] || slim_id }
+    end
+
+    targets_by_tf = Hash.new{|h,k| h[k] = [] }
+    regulome.through do |edge_id, values|
+      values = NamedArray.setup(values, regulome.fields)
+      tf = enrichment_scalar_value(values['source']) || enrichment_scalar_value(values[0])
+      target = enrichment_scalar_value(values['target']) || enrichment_scalar_value(values[1])
+      next if tf.nil? || tf.to_s.empty? || target.nil? || target.to_s.empty?
+      targets_by_tf[tf.to_s] << target.to_s
+    end
+    targets_by_tf.each{|tf, targets| targets.uniq! }
+
+    fields = %w(Treatment Time Sign GeneMode SlimGOID SlimName TFCount TargetCount UniqueGenesWithTerm RepeatedGeneOccurrences QueryUniqueGenes QueryRepeatedOccurrences)
+    tsv = TSV.setup({}, :key_field => 'ID', :fields => fields, :type => :list, :namespace => AGS.organism)
+    out_id = 0
+
+    gene_sets.through do |set_id, values|
+      values = NamedArray.setup(values, gene_sets.fields)
+      treatment = enrichment_scalar_value(values['Treatment'])
+      time_point = enrichment_scalar_value(values['Time']).to_i
+      sign = enrichment_scalar_value(values['Sign'])
+      gene_mode = enrichment_scalar_value(values['GeneMode'])
+      tfs = enrichment_scalar_value(values['TFs']).to_s.split('|').reject{|v| v.empty? }
+      tf_count = enrichment_scalar_value(values['TFCount']).to_i
+      target_count = enrichment_scalar_value(values['TargetCount']).to_i
+
+      occurrences = []
+      occurrences.concat tfs if gene_mode != 'tf_targets'
+      if gene_mode != 'tf_only'
+        tfs.each do |tf|
+          occurrences.concat targets_by_tf[tf]
+        end
+      end
+      occurrences = occurrences.collect(&:to_s).reject{|gene| gene.empty? }
+      unique_genes = occurrences.uniq
+
+      repeated_counts = Hash.new(0)
+      unique_counts = Hash.new{|h,k| h[k] = Set.new }
+      occurrences.each do |gene|
+        next unless annotations.include?(gene)
+        row = NamedArray.setup(annotations[gene], annotations.fields)
+        ids = enrichment_scalar_value(row['SlimGOIDs']).to_s.split('|').reject{|v| v.empty? }
+        names = enrichment_scalar_value(row['SlimNames']).to_s.split('|')
+        ids.each_with_index do |slim_id, i|
+          slim_name_by_id[slim_id] ||= names[i] || slim_id
+          repeated_counts[slim_id] += 1
+          unique_counts[slim_id] << gene
+        end
+      end
+
+      repeated_counts.keys.sort_by{|slim_id| [-repeated_counts[slim_id], slim_name_by_id[slim_id].to_s] }.each do |slim_id|
+        out_id += 1
+        tsv[out_id] = [treatment, time_point, sign, gene_mode, slim_id, slim_name_by_id[slim_id], tf_count, target_count, unique_counts[slim_id].length, repeated_counts[slim_id], unique_genes.length, occurrences.length]
       end
     end
     tsv
