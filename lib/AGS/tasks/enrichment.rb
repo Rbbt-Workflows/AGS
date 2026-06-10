@@ -2,24 +2,26 @@ require 'rbbt/statistics/hypergeometric'
 
 module AGS
 
-  dep :expressed_coding_genes, jobname: "Default"
-  input :list, :array, "Gene set"
-  input :background, :array, "Background genes", nil
-  input :database, :select, "Annotation to find enrichment", :go_bp, select_options: %w(go_bp)
-  task :gs_hyper => :tsv do |list,background,database|
-    background = step(:expressed_coding_genes).load if background.nil?
+  #dep :expressed_coding_genes, jobname: "Default"
+  #input :list, :array, "Gene set"
+  #input :background, :array, "Background genes", nil
+  #input :database, :select, "Annotation to find enrichment", :go_bp, select_options: %w(go_bp)
+  #task :gs_hyper => :tsv do |list,background,database|
+  #  background = step(:expressed_coding_genes).load if background.nil?
 
-    tsv = case database.to_sym
-          when :go_bp
-            Organism.gene_go_bp(AGS.organism).tsv type: :flat
-          else
-            raise ParameterException, "Unkown database parameter #{database}"
-          end
+  #  tsv = case database.to_sym
+  #        when :go_bp
+  #          Organism.gene_go_bp(AGS.organism).tsv type: :flat
+  #        else
+  #          raise ParameterException, "Unkown database parameter #{database}"
+  #        end
 
-    tsv = tsv.change_key "Associated Gene Name"
+  #  tsv = tsv.change_key "Associated Gene Name"
 
-    tsv.enrichment list, nil, background: background
-  end
+  #  tsv.enrichment list, nil, background: background
+  #end
+
+  #{{{ G:PROFILER
 
   dep :expressed_coding_genes, jobname: "Default"
   input :list, :array, "Gene set"
@@ -201,6 +203,9 @@ module AGS
     tsv
   end
 
+  #}}} G:PROFILER
+
+  #{{{ HELPERS
 
   # Paper-oriented functional enrichment utilities
   #
@@ -343,6 +348,10 @@ module AGS
     end
   end
 
+  #}}} HELPERS
+
+  #{{{ ONSET GENE SETS
+
   dep :full_gene_info
   input :source_type, :select, 'Gene sets to summarize', 'cluster', :select_options => %w(cluster)
   task :functional_onset_gene_sets => :tsv do |source_type|
@@ -369,6 +378,9 @@ module AGS
     tsv
   end
 
+  #}}} ONSET GENE SETS
+
+  #{{{ GOSLIM
   dep :functional_onset_gene_sets
   task :goslim_bp_gene_sets => :tsv do
     step(:functional_onset_gene_sets).load
@@ -530,6 +542,10 @@ module AGS
     tsv
   end
 
+  #}}} GOSLIM
+
+  #{{{ HALMARKS
+
   input :library_url, :string, 'Enrichr text export for MSigDB Hallmark gene sets', 'https://maayanlab.cloud/Enrichr/geneSetLibrary?mode=text&libraryName=MSigDB_Hallmark_2020'
   task :hallmark_gene_sets => :tsv do |library_url|
     require 'open-uri'
@@ -617,6 +633,10 @@ module AGS
     tsv
   end
 
+  #}}} HALLMARKS
+
+  #{{{ REDUCTION
+
   input :source, :select, 'Enrichment source to reduce', 'hallmark', :select_options => %w(hallmark goslim)
   input :adjusted_pvalue_threshold, :float, 'Adjusted p-value threshold', 0.05
   input :overlap_method, :select, 'Overlap score used for redundancy filtering', 'overlap_coefficient', :select_options => %w(overlap_coefficient jaccard)
@@ -668,6 +688,9 @@ module AGS
     tsv
   end
 
+  #}}} REDUCTION
+
+  #{{{ TF and TARGETS
 
   # TF-regulatory functional enrichment
   #
@@ -686,10 +709,26 @@ module AGS
 
   dep :tf_predictions
   dep :regulome
+  dep :full_gene_info
   input :gene_mode, :select, 'Genes used to represent each TF activity set', 'tf_and_targets', :select_options => %w(tf_only tf_targets tf_and_targets)
-  task :tf_activity_regulatory_gene_sets => :tsv do |gene_mode|
+  input :onset_targets_only, :boolean, 'Restrict CollecTRI2 targets to genes with an onset in the same treatment-time context', false
+  task :tf_activity_regulatory_gene_sets => :tsv do |gene_mode, onset_targets_only|
+    require 'set'
     predictions = step(:tf_predictions).load
     regulome = step(:regulome).load
+
+    onset_targets_by_context = Hash.new{|h,k| h[k] = Set.new }
+    if onset_targets_only
+      info = step(:full_gene_info).load
+      info.through do |gene, values|
+        values = NamedArray.setup(values, info.fields)
+        enrichment_treatment_order.each do |treatment|
+          enrichment_onset_events(values["#{treatment}: FC clusters"]).each do |event|
+            onset_targets_by_context[[treatment, event[:start_time]]] << gene.to_s
+          end
+        end
+      end
+    end
 
     targets_by_tf = Hash.new{|h,k| h[k] = [] }
     regulome.through do |edge_id, values|
@@ -718,7 +757,9 @@ module AGS
 
       %w(positive negative both).each do |sign|
         tfs = sign_tfs[sign].uniq.sort
-        targets = tfs.collect{|tf| targets_by_tf[tf] }.flatten.compact.uniq.sort
+        targets = tfs.collect{|tf| targets_by_tf[tf] }.flatten.compact.uniq
+        targets = targets.select{|target| onset_targets_by_context[[treatment, time_point]].include?(target) } if onset_targets_only
+        targets = targets.sort
         genes = case gene_mode.to_s
                 when 'tf_only'
                   tfs
@@ -731,10 +772,11 @@ module AGS
       end
     end
 
-    tsv = TSV.setup({}, :key_field => 'ID', :fields => %w(Treatment Time Sign GeneMode TFs Targets Genes TFCount TargetCount GeneCount), :type => :list, :namespace => AGS.organism)
+    tsv = TSV.setup({}, :key_field => 'ID', :fields => %w(Treatment Time Sign GeneMode TargetScope TFs Targets Genes TFCount TargetCount GeneCount), :type => :list, :namespace => AGS.organism)
     rows.sort_by{|treatment,time,sign,mode,tfs,targets,genes| [enrichment_treatment_sort_index(treatment), time.to_i, sign] }.each_with_index do |row, i|
       treatment, time_point, sign, mode, tfs, targets, genes = row
-      tsv[i + 1] = [treatment, time_point, sign, mode, tfs * '|', targets * '|', genes * '|', tfs.length, targets.length, genes.length]
+      target_scope = onset_targets_only ? 'onset_targets_this_time' : 'all_collectri_targets'
+      tsv[i + 1] = [treatment, time_point, sign, mode, target_scope, tfs * '|', targets * '|', genes * '|', tfs.length, targets.length, genes.length]
     end
     tsv
   end
@@ -1079,4 +1121,5 @@ module AGS
     tsv
   end
 
+  #}}} TF and TARGETS
 end
