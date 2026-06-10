@@ -1122,4 +1122,357 @@ module AGS
   end
 
   #}}} TF and TARGETS
+
+  # Generic functional enrichment entry points
+  #
+  # These are the preferred paper-development tasks. They separate the query
+  # layer from the annotation layer so the same enrichment code can be used for
+  # onset genes, TF activity calls, TF targets, or TF plus target regulatory
+  # sets, and for GO-Slim, MSigDB Hallmark, and Menyhart cancer hallmark
+  # annotations.
+
+  helper :functional_cancer_hallmark_url do |annotation|
+    case annotation.to_s
+    when 'cancerhallmarks_core'
+      'https://cancerhallmarks.com/download_file/Menyhart_JPA_CancerHallmarks_core.txt'
+    when 'cancerhallmarks_integrated'
+      'https://cancerhallmarks.com/download_file/Menyhart_JPA_CancerHallmarks_integrated.txt'
+    else
+      nil
+    end
+  end
+
+  helper :functional_parse_gene_set_text do |text|
+    sets = {}
+    text.each_line do |line|
+      parts = line.chomp.split("\t").collect{|part| part.to_s.strip }
+      next if parts.length < 2
+      term = parts.shift
+      next if term.empty?
+      genes = parts.collect do |entry|
+        entry.to_s.split(/[\/;, ]+/)
+      end.flatten.collect(&:strip).reject{|gene| gene.empty? }.uniq.sort
+      next if genes.empty?
+      sets[term] = genes
+    end
+    sets
+  end
+
+  helper :functional_term_field_names do |annotation|
+    case annotation.to_s
+    when 'goslim'
+      ['SlimGOID', 'SlimName']
+    else
+      ['TermID', 'TermName']
+    end
+  end
+
+  input :annotation, :select, 'Annotation source', 'cancerhallmarks_core', :select_options => %w(goslim msigdb_hallmark cancerhallmarks_core cancerhallmarks_integrated)
+  dep :gene_goslim_bp_annotations
+  dep :hallmark_gene_sets
+  dep :expressed_coding_genes
+  task :functional_annotation_gene_sets => :tsv do |annotation|
+    require 'open-uri'
+    require 'set'
+    background = step(:expressed_coding_genes).load.collect(&:to_s).to_set
+    sets = {}
+    names = {}
+
+    case annotation.to_s
+    when 'goslim'
+      ann = step(:gene_goslim_bp_annotations).load
+      ann.through do |gene, values|
+        values = NamedArray.setup(values, ann.fields)
+        next unless background.include?(gene.to_s)
+        ids = enrichment_scalar_value(values['SlimGOIDs']).to_s.split('|').reject{|v| v.empty? }
+        term_names = enrichment_scalar_value(values['SlimNames']).to_s.split('|')
+        ids.each_with_index do |term_id, i|
+          sets[term_id] ||= []
+          sets[term_id] << gene.to_s
+          names[term_id] ||= term_names[i] || term_id
+        end
+      end
+    when 'msigdb_hallmark'
+      hallmark = step(:hallmark_gene_sets).load
+      hallmark.through do |term, values|
+        values = NamedArray.setup(values, hallmark.fields)
+        genes = enrichment_scalar_value(values['Genes']).to_s.split('|').reject{|v| v.empty? } & background.to_a
+        next if genes.empty?
+        sets[term.to_s] = genes.uniq.sort
+        names[term.to_s] = term.to_s
+      end
+    when 'cancerhallmarks_core', 'cancerhallmarks_integrated'
+      url = functional_cancer_hallmark_url(annotation)
+      parsed = functional_parse_gene_set_text(URI.open(url, 'User-Agent' => 'Mozilla/5.0').read)
+      parsed.each do |term, genes|
+        filtered = genes & background.to_a
+        next if filtered.empty?
+        sets[term] = filtered.uniq.sort
+        names[term] = term
+      end
+    else
+      raise ParameterException, "Unknown annotation source #{annotation}"
+    end
+
+    tsv = TSV.setup({}, :key_field => 'TermID', :fields => %w(TermName Annotation Genes Size), :type => :list, :namespace => AGS.organism)
+    sets.keys.sort.each do |term|
+      genes = sets[term].uniq.sort
+      tsv[term] = [names[term] || term, annotation, genes * '|', genes.length]
+    end
+    tsv
+  end
+
+  input :query_type, :select, 'Query gene-set source', 'onset_genes', :select_options => %w(onset_genes tfs targets tf_and_targets)
+  dep :full_gene_info
+  dep :tf_predictions
+  dep :regulome
+  task :functional_query_gene_sets => :tsv do |query_type|
+    require 'set'
+    tsv = TSV.setup({}, :key_field => 'ID', :fields => %w(QueryType Treatment Time Direction Genes TFs Targets QuerySize TFCount TargetCount), :type => :list, :namespace => AGS.organism)
+    id = 0
+
+    if query_type.to_s == 'onset_genes'
+      info = step(:full_gene_info).load
+      enrichment_treatment_order.each do |treatment|
+        AGS::TIME_POINTS.each do |time_point|
+          %w(up down both).each do |direction|
+            genes = []
+            info.through do |gene, values|
+              values = NamedArray.setup(values, info.fields)
+              events = enrichment_onset_events(values["#{treatment}: FC clusters"])
+              selected = events.select{|event| event[:start_time] == time_point }
+              selected = selected.select{|event| event[:direction] == direction } unless direction == 'both'
+              genes << gene.to_s if selected.any?
+            end
+            genes = genes.uniq.sort
+            id += 1
+            tsv[id] = [query_type, treatment, time_point, direction, genes * '|', '', '', genes.length, 0, 0]
+          end
+        end
+      end
+      next tsv
+    end
+
+    predictions = step(:tf_predictions).load
+    regulome = step(:regulome).load
+    targets_by_tf = Hash.new{|h,k| h[k] = [] }
+    regulome.through do |edge_id, values|
+      values = NamedArray.setup(values, regulome.fields)
+      tf = enrichment_scalar_value(values['source']) || enrichment_scalar_value(values[0])
+      target = enrichment_scalar_value(values['target']) || enrichment_scalar_value(values[1])
+      next if tf.nil? || tf.to_s.empty? || target.nil? || target.to_s.empty?
+      targets_by_tf[tf.to_s] << target.to_s
+    end
+    targets_by_tf.each{|tf, targets| targets.uniq! }
+
+    predictions.fields.each do |field|
+      parsed = enrichment_parse_tf_context(field)
+      next if parsed.nil?
+      treatment, time_point = parsed
+      tfs_by_sign = Hash.new{|h,k| h[k] = [] }
+      predictions.through do |tf, values|
+        values = NamedArray.setup(values, predictions.fields)
+        activity = enrichment_scalar_value(values[field]).to_f
+        next if activity == 0
+        sign = activity > 0 ? 'positive' : 'negative'
+        tfs_by_sign[sign] << tf.to_s
+        tfs_by_sign['both'] << tf.to_s
+      end
+
+      %w(positive negative both).each do |sign|
+        tfs = tfs_by_sign[sign].uniq.sort
+        targets = tfs.collect{|tf| targets_by_tf[tf] }.flatten.compact.uniq.sort
+        genes = case query_type.to_s
+                when 'tfs'
+                  tfs
+                when 'targets'
+                  targets
+                else
+                  (tfs + targets).uniq.sort
+                end
+        id += 1
+        tsv[id] = [query_type, treatment, time_point, sign, genes * '|', tfs * '|', targets * '|', genes.length, tfs.length, targets.length]
+      end
+    end
+    tsv
+  end
+
+  input :query_type, :select, 'Query gene-set source', 'onset_genes', :select_options => %w(onset_genes tfs targets tf_and_targets)
+  input :annotation, :select, 'Annotation source', 'cancerhallmarks_core', :select_options => %w(goslim msigdb_hallmark cancerhallmarks_core cancerhallmarks_integrated)
+  input :min_query_size, :integer, 'Minimum query size', 10
+  input :min_intersection, :integer, 'Minimum term intersection', 3
+  dep :functional_query_gene_sets do |jobname, options|
+    options.merge(:query_type => options[:query_type])
+  end
+  dep :functional_annotation_gene_sets do |jobname, options|
+    options.merge(:annotation => options[:annotation])
+  end
+  dep :expressed_coding_genes
+  task :functional_enrichment => :tsv do |query_type, annotation, min_query_size, min_intersection|
+    require 'set'
+    queries = dependencies.find{|dep| dep.task_name == :functional_query_gene_sets }.load
+    annotations = dependencies.find{|dep| dep.task_name == :functional_annotation_gene_sets }.load
+    background = step(:expressed_coding_genes).load.collect(&:to_s).to_set
+
+    term_genes = {}
+    term_names = {}
+    annotations.through do |term_id, values|
+      values = NamedArray.setup(values, annotations.fields)
+      genes = enrichment_scalar_value(values['Genes']).to_s.split('|').reject{|v| v.empty? }.to_set & background
+      next if genes.empty?
+      term_genes[term_id.to_s] = genes.to_a.sort
+      term_names[term_id.to_s] = enrichment_scalar_value(values['TermName']).to_s
+    end
+    effective_background = background & term_genes.values.flatten.to_set
+
+    raw_rows = []
+    queries.through do |query_id, values|
+      values = NamedArray.setup(values, queries.fields)
+      qtype = enrichment_scalar_value(values['QueryType'])
+      next unless qtype.to_s == query_type.to_s
+      treatment = enrichment_scalar_value(values['Treatment'])
+      time_point = enrichment_scalar_value(values['Time']).to_i
+      direction = enrichment_scalar_value(values['Direction'])
+      query_genes = enrichment_scalar_value(values['Genes']).to_s.split('|').reject{|v| v.empty? }.to_set & effective_background
+      next if query_genes.length < min_query_size
+      tf_count = enrichment_scalar_value(values['TFCount']).to_i
+      target_count = enrichment_scalar_value(values['TargetCount']).to_i
+
+      rows = []
+      pvalues = []
+      term_genes.keys.sort.each do |term_id|
+        genes = term_genes[term_id].to_set
+        intersection = (query_genes & genes).to_a.sort
+        next if intersection.length < min_intersection
+        pvalue = enrichment_hypergeom_upper_tail(intersection.length, genes.length, query_genes.length, effective_background.length)
+        pvalues << pvalue
+        rows << [qtype, annotation, treatment, time_point, direction, term_id, term_names[term_id], tf_count, target_count, query_genes.length, genes.length, intersection.length, pvalue, nil, intersection.length.to_f / query_genes.length, intersection.length.to_f / genes.length, intersection * '|']
+      end
+      qvalues = enrichment_bh_adjust_values(pvalues)
+      rows.each_with_index do |row, row_i|
+        row[13] = qvalues[row_i]
+        raw_rows << row
+      end
+    end
+
+    fields = %w(QueryType Annotation Treatment Time Direction TermID TermName TFCount TargetCount QuerySize TermBackgroundSize IntersectionSize PValue AdjustedPValue Precision Recall Genes)
+    tsv = TSV.setup({}, :key_field => 'ID', :fields => fields, :type => :list, :namespace => AGS.organism)
+    raw_rows.sort_by{|row| [row[0].to_s, row[1].to_s, enrichment_treatment_sort_index(row[2]), row[3].to_i, row[4].to_s, row[13].to_f, row[6].to_s] }.each_with_index do |row, i|
+      tsv[i + 1] = row
+    end
+    tsv
+  end
+
+  input :query_type, :select, 'Query gene-set source', 'onset_genes', :select_options => %w(onset_genes tfs targets tf_and_targets)
+  input :annotation, :select, 'Annotation source', 'cancerhallmarks_core', :select_options => %w(goslim msigdb_hallmark cancerhallmarks_core cancerhallmarks_integrated)
+  input :adjusted_pvalue_threshold, :float, 'Adjusted p-value threshold', 0.05
+  input :top_n_per_context, :integer, 'Top terms per context', 5
+  dep :functional_enrichment do |jobname, options|
+    options.merge(:query_type => options[:query_type], :annotation => options[:annotation])
+  end
+  task :functional_top_terms => :tsv do |query_type, annotation, adjusted_pvalue_threshold, top_n_per_context|
+    enrichment = step(:functional_enrichment).load
+    idx = Hash[enrichment.fields.each_with_index.to_a]
+    grouped = Hash.new{|h,k| h[k] = [] }
+    enrichment.through do |row_id, values|
+      qvalue = enrichment_scalar_value(values[idx['AdjustedPValue']]).to_f
+      next if qvalue > adjusted_pvalue_threshold
+      key = [enrichment_scalar_value(values[idx['QueryType']]), enrichment_scalar_value(values[idx['Annotation']]), enrichment_scalar_value(values[idx['Treatment']]), enrichment_scalar_value(values[idx['Time']]).to_i, enrichment_scalar_value(values[idx['Direction']])]
+      grouped[key] << values
+    end
+    fields = %w(QueryType Annotation Treatment Time Direction TermID TermName TFCount TargetCount QuerySize TermBackgroundSize IntersectionSize PValue AdjustedPValue Precision Recall Genes)
+    tsv = TSV.setup({}, :key_field => 'ID', :fields => fields, :type => :list, :namespace => AGS.organism)
+    id = 0
+    grouped.keys.sort_by{|qtype,ann,treatment,time,direction| [qtype.to_s, ann.to_s, enrichment_treatment_sort_index(treatment), time, direction.to_s] }.each do |key|
+      grouped[key].sort_by{|values| [enrichment_scalar_value(values[idx['AdjustedPValue']]).to_f, -enrichment_scalar_value(values[idx['IntersectionSize']]).to_i, enrichment_scalar_value(values[idx['TermName']]).to_s] }.first(top_n_per_context).each do |values|
+        id += 1
+        tsv[id] = fields.collect{|field| enrichment_scalar_value(values[idx[field]]) }
+      end
+    end
+    tsv
+  end
+
+  input :query_type, :select, 'Query gene-set source', 'onset_genes', :select_options => %w(onset_genes tfs targets tf_and_targets)
+  input :annotation, :select, 'Annotation source', 'cancerhallmarks_core', :select_options => %w(goslim msigdb_hallmark cancerhallmarks_core cancerhallmarks_integrated)
+  input :adjusted_pvalue_threshold, :float, 'Adjusted p-value threshold', 0.05
+  input :overlap_method, :select, 'Overlap score used for redundancy filtering', 'overlap_coefficient', :select_options => %w(overlap_coefficient jaccard)
+  input :overlap_threshold, :float, 'Remove lower-ranked terms with overlap at or above this value', 0.5
+  dep :functional_enrichment do |jobname, options|
+    options.merge(:query_type => options[:query_type], :annotation => options[:annotation])
+  end
+  task :functional_enrichment_reduced => :tsv do |query_type, annotation, adjusted_pvalue_threshold, overlap_method, overlap_threshold|
+    enrichment = step(:functional_enrichment).load
+    idx = Hash[enrichment.fields.each_with_index.to_a]
+    grouped = Hash.new{|h,k| h[k] = [] }
+    enrichment.through do |row_id, values|
+      qvalue = enrichment_scalar_value(values[idx['AdjustedPValue']]).to_f
+      next if qvalue > adjusted_pvalue_threshold
+      key = [enrichment_scalar_value(values[idx['QueryType']]), enrichment_scalar_value(values[idx['Annotation']]), enrichment_scalar_value(values[idx['Treatment']]), enrichment_scalar_value(values[idx['Time']]).to_i, enrichment_scalar_value(values[idx['Direction']])]
+      genes = enrichment_scalar_value(values[idx['Genes']]).to_s.split('|').reject{|v| v.empty? }
+      grouped[key] << {
+        :term_id => enrichment_scalar_value(values[idx['TermID']]),
+        :term_name => enrichment_scalar_value(values[idx['TermName']]),
+        :tf_count => enrichment_scalar_value(values[idx['TFCount']]).to_i,
+        :target_count => enrichment_scalar_value(values[idx['TargetCount']]).to_i,
+        :query_size => enrichment_scalar_value(values[idx['QuerySize']]).to_i,
+        :term_size => enrichment_scalar_value(values[idx['TermBackgroundSize']]).to_i,
+        :intersection => enrichment_scalar_value(values[idx['IntersectionSize']]).to_i,
+        :pvalue => enrichment_scalar_value(values[idx['PValue']]).to_f,
+        :qvalue => qvalue,
+        :precision => enrichment_scalar_value(values[idx['Precision']]),
+        :recall => enrichment_scalar_value(values[idx['Recall']]),
+        :genes => genes
+      }
+    end
+    fields = %w(QueryType Annotation Treatment Time Direction TermID TermName TFCount TargetCount QuerySize TermBackgroundSize IntersectionSize PValue AdjustedPValue Precision Recall MostSimilarKept MaxOverlap Genes)
+    tsv = TSV.setup({}, :key_field => 'ID', :fields => fields, :type => :list, :namespace => AGS.organism)
+    id = 0
+    grouped.keys.sort_by{|qtype,ann,treatment,time,direction| [qtype.to_s, ann.to_s, enrichment_treatment_sort_index(treatment), time, direction.to_s] }.each do |key|
+      kept = []
+      grouped[key].sort_by{|row| [row[:qvalue], -row[:intersection], row[:term_name].to_s] }.each do |row|
+        most_similar = nil
+        max_overlap = 0.0
+        kept.each do |prev|
+          overlap = enrichment_overlap_score(row[:genes], prev[:genes], overlap_method)
+          if overlap > max_overlap
+            max_overlap = overlap
+            most_similar = prev
+          end
+        end
+        next if most_similar && max_overlap >= overlap_threshold
+        kept << row
+        id += 1
+        tsv[id] = key + [row[:term_id], row[:term_name], row[:tf_count], row[:target_count], row[:query_size], row[:term_size], row[:intersection], row[:pvalue], row[:qvalue], row[:precision], row[:recall], most_similar ? most_similar[:term_name] : nil, max_overlap, row[:genes] * '|']
+      end
+    end
+    tsv
+  end
+
+  dep :functional_top_terms do |jobname,options|
+    %w(onset_genes tfs targets tf_and_targets).collect do |query_type|
+      %w(goslim msigdb_hallmark cancerhallmarks_core cancerhallmarks_integrated).collect do |annotation|
+        {annotation: annotation, query_type: query_type}
+      end
+    end.flatten
+  end
+  dep :functional_enrichment_reduced do |jobname,options|
+    %w(onset_genes tfs targets tf_and_targets).collect do |query_type|
+      %w(goslim msigdb_hallmark cancerhallmarks_core cancerhallmarks_integrated).collect do |annotation|
+        {annotation: annotation, query_type: query_type}
+      end
+    end.flatten
+  end
+  task :functional_enrichment_suite => :array do
+    dependencies.collect do |dep|
+      task_name = dep.task_name
+      annotation = dep.recursive_inputs[:annotation]
+      query_type = dep.recursive_inputs[:query_type]
+
+      target = file("#{task_name}.#{annotation}.#{query_type}.tsv")
+      Open.cp dep.path, target
+      target
+    end
+  end
+
+
 end
