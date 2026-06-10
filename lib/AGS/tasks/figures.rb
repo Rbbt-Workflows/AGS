@@ -1588,6 +1588,89 @@ ggplot(data, aes(Pair, Count, fill=Category)) + geom_col(position='stack') + coo
 RCODE
   end
 
+
+  dep :tf_predictions
+  input :time_point, :integer, 'Time point for TF activity scatter', 1
+  input :treatment_x, :select, 'Treatment on x-axis', 'PI', :select_options => FIGURE_TREATMENT_ORDER
+  input :treatment_y, :select, 'Treatment on y-axis', 'FiveZ', :select_options => FIGURE_TREATMENT_ORDER
+  input :label_tfs, :array, 'TFs to label in the scatter', %w(FOXO3 FOXO1 FOXO4 JUN FOS ELK1 ETS1 ETS2 MYC TP53 PPARG PPARA CTNNB1 E2F1 STAT3 NFE2L2 SP1 ATF4)
+  extension :png
+  task :figure_tf_activity_pair_scatter => :binary do |time_point, treatment_x, treatment_y, label_tfs|
+    predictions = step(:tf_predictions).load
+    field_x = "#{treatment_x}-T#{time_point}"
+    field_y = "#{treatment_y}-T#{time_point}"
+    raise "Field not found: #{field_x}" unless predictions.fields.include?(field_x)
+    raise "Field not found: #{field_y}" unless predictions.fields.include?(field_y)
+
+    rows = []
+    predictions.through do |tf, values|
+      values = NamedArray.setup(values, predictions.fields)
+      x = AGS.figure_safe_float(values[field_x], 0.0)
+      y = AGS.figure_safe_float(values[field_y], 0.0)
+      next if x == 0.0 && y == 0.0
+      category = if x != 0.0 && y != 0.0
+                   x * y > 0 ? 'shared same sign' : 'shared opposite sign'
+                 elsif x != 0.0
+                   "#{AGS.figure_treatment_label(treatment_x)} only"
+                 else
+                   "#{AGS.figure_treatment_label(treatment_y)} only"
+                 end
+      quadrant = if x > 0 && y > 0
+                   '+/+'
+                 elsif x > 0 && y < 0
+                   '+/-'
+                 elsif x < 0 && y > 0
+                   '-/+'
+                 elsif x < 0 && y < 0
+                   '-/-'
+                 elsif x != 0
+                   'x only'
+                 else
+                   'y only'
+                 end
+      label = label_tfs.include?(tf.to_s) ? tf.to_s : ''
+      rows << [tf, x, y, label, category, quadrant]
+    end
+
+    plot_tsv = AGS.figure_build_tsv(rows, 'TF', %w(ActivityX ActivityY LabelTF Category Quadrant))
+    label_x = AGS.figure_treatment_label(treatment_x)
+    label_y = AGS.figure_treatment_label(treatment_y)
+    title = "#{label_x} versus #{label_y} TF activities at T#{time_point}"
+    AGS.figure_ggplot(self.tmp_path, plot_tsv, <<-RCODE, 6.2, 5.8)
+data$ActivityX <- as.numeric(data$ActivityX)
+data$ActivityY <- as.numeric(data$ActivityY)
+data$Category <- factor(data$Category)
+shared <- subset(data, ActivityX != 0 & ActivityY != 0)
+if (nrow(shared) >= 3) {
+  r_shared <- round(cor(shared$ActivityX, shared$ActivityY), 2)
+} else {
+  r_shared <- NA
+}
+r_label <- paste0('shared active: r = ', r_shared, ', n = ', nrow(shared))
+base <- ggplot(data, aes(x=ActivityX, y=ActivityY, color=Category)) +
+  geom_hline(yintercept=0, linetype='dashed', color='grey55') +
+  geom_vline(xintercept=0, linetype='dashed', color='grey55') +
+  geom_point(alpha=0.65, size=1.8) +
+  scale_color_manual(values=c('shared opposite sign'='#D73027', 'shared same sign'='#1A9850',
+                              '#{label_x} only'='grey55', '#{label_y} only'='grey75')) +
+  annotate('text', x=Inf, y=Inf, label=r_label, hjust=1.05, vjust=1.5, size=3.5) +
+  theme_bw() +
+  labs(x='#{label_x} T#{time_point} TF activity', y='#{label_y} T#{time_point} TF activity',
+       color='', title='#{title}') +
+  theme(legend.position='bottom', text=element_text(size=10))
+label_data <- subset(data, LabelTF != '')
+if (nrow(label_data) > 0) {
+  if (requireNamespace('ggrepel', quietly=TRUE)) {
+    base <- base + ggrepel::geom_text_repel(data=label_data, aes(label=LabelTF), size=3, max.overlaps=30,
+                                            box.padding=0.35, segment.color='grey60')
+  } else {
+    base <- base + geom_text(data=label_data, aes(label=LabelTF), size=3, vjust=-0.5, check_overlap=TRUE)
+  }
+}
+base
+RCODE
+  end
+
   dep :neko_dynamic_non_dynamic_summary
   extension :png
   task :figure_neko_match_fraction_bar => :binary do
@@ -1631,87 +1714,64 @@ RCODE
     nil
   end
 
-  dep :tf_predictions, :scheme => 'dynamic'
-  dep :tf_predictions, :scheme => 'non-dynamic'
+  dep :dynamic_vs_nondynamic_tf_timing_summary
   extension :png
   task :figure_dynamic_vs_nondynamic_earliest_detection => :binary do
-    dyn = dependencies.find{|d| d.recursive_inputs[:scheme].to_s == 'dynamic' }.load
-    nd = dependencies.find{|d| d.recursive_inputs[:scheme].to_s == 'non-dynamic' }.load
-    maps = {}
-    {'dynamic' => dyn, 'non-dynamic' => nd}.each do |scheme_name, tsv|
-      map = {}
-      tsv.through do |tf, values|
-        values = NamedArray.setup(values, tsv.fields)
-        FIGURE_TREATMENT_ORDER.each do |treatment|
-          %w(positive negative).each do |sign|
-            FIGURE_TIME_POINTS.each do |time|
-              field = "#{treatment}-T#{time}"
-              next unless tsv.fields.include?(field)
-              value = AGS.figure_safe_float(values[field], 0.0)
-              next unless (sign == 'positive' && value > 0) || (sign == 'negative' && value < 0)
-              map[[tf, treatment, sign]] ||= time
-            end
-          end
-        end
-      end
-      maps[scheme_name] = map
-    end
-    counts = Hash.new(0)
-    (maps['dynamic'].keys | maps['non-dynamic'].keys).each do |tf,treatment,sign|
-      d = maps['dynamic'][[tf,treatment,sign]]
-      n = maps['non-dynamic'][[tf,treatment,sign]]
-      category = if d && n
-                   FIGURE_TIME_POINTS.index(d) < FIGURE_TIME_POINTS.index(n) ? 'dynamic earlier' : (FIGURE_TIME_POINTS.index(d) > FIGURE_TIME_POINTS.index(n) ? 'non-dynamic earlier' : 'same time')
-                 elsif d
-                   'dynamic only'
-                 else
-                   'non-dynamic only'
-                 end
-      counts[[treatment, sign, category]] += 1
-    end
-    rows=[]; counts.each_with_index{|((treatment, sign, category), count), i| rows << [i+1, treatment, sign, category, count] }
-    plot_tsv=AGS.figure_build_tsv(rows, 'ID', %w(Treatment Sign Category Count))
+    plot_tsv = step(:dynamic_vs_nondynamic_tf_timing_summary).load
     AGS.figure_ggplot(self.tmp_path, plot_tsv, <<-RCODE, 10, 5)
 data$TreatmentLabel <- factor(data$Treatment, levels=c(#{FIGURE_TREATMENT_ORDER.collect{|t| "'#{t}'"} * ','}), labels=c(#{AGS.figure_treatment_levels}))
-data$Count <- as.numeric(data$Count)
-ggplot(data, aes(TreatmentLabel, Count, fill=Category)) + geom_col() + facet_wrap(~Sign, nrow=1) +
-  scale_fill_brewer(palette='Set2') + coord_flip() + theme_bw() + labs(x='', y='TF-treatment-sign calls', fill='Earliest detection') + theme(legend.position='bottom')
+data$TFEvents <- as.numeric(data$TFEvents)
+data$Sign <- factor(data$Sign, levels=c('positive','negative','both'))
+data$Category <- factor(data$Category, levels=c('dynamic earlier','same time','non-dynamic earlier','dynamic only','non-dynamic only'))
+data <- subset(data, Sign != 'both')
+ggplot(data, aes(TreatmentLabel, TFEvents, fill=Category)) + geom_col() + facet_wrap(~Sign, nrow=1) +
+  scale_fill_brewer(palette='Set2') + coord_flip() + theme_bw() +
+  labs(x='', y='TF-treatment-sign events', fill='Earliest detection') + theme(legend.position='bottom')
 RCODE
   end
 
-  dep :tf_predictions, :scheme => 'dynamic'
-  dep :tf_predictions, :scheme => 'non-dynamic'
+  dep :dynamic_vs_nondynamic_tf_timing_summary
+  extension :png
+  task :figure_dynamic_vs_nondynamic_shared_timing_fraction => :binary do
+    plot_tsv = step(:dynamic_vs_nondynamic_tf_timing_summary).load
+    AGS.figure_ggplot(self.tmp_path, plot_tsv, <<-RCODE, 8, 5)
+data <- subset(data, Sign == 'both' & SharedCategory == 'true')
+data$TreatmentLabel <- factor(data$Treatment, levels=c(#{FIGURE_TREATMENT_ORDER.collect{|t| "'#{t}'"} * ','}), labels=c(#{AGS.figure_treatment_levels}))
+data$TFEvents <- as.numeric(data$TFEvents)
+data$Category <- factor(data$Category, levels=c('dynamic earlier','same time','non-dynamic earlier'))
+ggplot(data, aes(TreatmentLabel, TFEvents, fill=Category)) + geom_col(position='fill') + coord_flip() +
+  scale_fill_manual(values=c('dynamic earlier'='#1B9E77','same time'='grey75','non-dynamic earlier'='#D95F02')) +
+  theme_bw() + labs(x='', y='Fraction of shared TF-treatment-sign events', fill='Timing relation') + theme(legend.position='bottom')
+RCODE
+  end
+
+  dep :dynamic_vs_nondynamic_tf_persistence_distribution
   extension :png
   task :figure_dynamic_vs_nondynamic_persistence => :binary do
-    rows=[]; id=0
-    dependencies.each do |dep|
-      scheme_name = dep.recursive_inputs[:scheme].to_s
-      tsv = dep.load
-      tsv.through do |tf, values|
-        values = NamedArray.setup(values, tsv.fields)
-        FIGURE_TREATMENT_ORDER.each do |treatment|
-          %w(positive negative).each do |sign|
-            count = 0
-            FIGURE_TIME_POINTS.each do |time|
-              field = "#{treatment}-T#{time}"
-              next unless tsv.fields.include?(field)
-              value = AGS.figure_safe_float(values[field], 0.0)
-              count += 1 if (sign == 'positive' && value > 0) || (sign == 'negative' && value < 0)
-            end
-            next if count == 0
-            id += 1
-            rows << [id, scheme_name, treatment, sign, count]
-          end
-        end
-      end
-    end
-    plot_tsv=AGS.figure_build_tsv(rows, 'ID', %w(Scheme Treatment Sign ActiveTimepoints))
+    plot_tsv = step(:dynamic_vs_nondynamic_tf_persistence_distribution).load
     AGS.figure_ggplot(self.tmp_path, plot_tsv, <<-RCODE, 9, 5)
+data <- subset(data, Sign != 'both')
 data$ActiveTimepoints <- as.numeric(data$ActiveTimepoints)
+data$TFEvents <- as.numeric(data$TFEvents)
 data$TreatmentLabel <- factor(data$Treatment, levels=c(#{FIGURE_TREATMENT_ORDER.collect{|t| "'#{t}'"} * ','}), labels=c(#{AGS.figure_treatment_levels}))
-ggplot(data, aes(factor(ActiveTimepoints), fill=Scheme)) + geom_bar(position='dodge') + facet_grid(Sign ~ TreatmentLabel) +
+ggplot(data, aes(factor(ActiveTimepoints), TFEvents, fill=Scheme)) + geom_col(position='dodge') + facet_grid(Sign ~ TreatmentLabel) +
   scale_fill_manual(values=c('dynamic'='#D73027','non-dynamic'='#4575B4')) + theme_bw() +
-  labs(x='Active sampled windows per TF-treatment-sign', y='Count', fill='Scheme') + theme(axis.text.x=element_text(angle=45, hjust=1), legend.position='bottom')
+  labs(x='Active sampled windows per TF-treatment-sign', y='Events', fill='Scheme') + theme(axis.text.x=element_text(angle=45, hjust=1), legend.position='bottom')
+RCODE
+  end
+
+  dep :dynamic_vs_nondynamic_tf_persistence_comparison
+  extension :png
+  task :figure_dynamic_vs_nondynamic_shared_persistence_comparison => :binary do
+    plot_tsv = step(:dynamic_vs_nondynamic_tf_persistence_comparison).load
+    AGS.figure_ggplot(self.tmp_path, plot_tsv, <<-RCODE, 8, 5)
+data <- subset(data, Sign == 'both')
+data$TFEvents <- as.numeric(data$TFEvents)
+data$TreatmentLabel <- factor(data$Treatment, levels=c(#{FIGURE_TREATMENT_ORDER.collect{|t| "'#{t}'"} * ','}), labels=c(#{AGS.figure_treatment_levels}))
+data$Category <- factor(data$Category, levels=c('dynamic shorter','same persistence','non-dynamic shorter'))
+ggplot(data, aes(TreatmentLabel, TFEvents, fill=Category)) + geom_col(position='fill') + coord_flip() +
+  scale_fill_manual(values=c('dynamic shorter'='#1B9E77','same persistence'='grey75','non-dynamic shorter'='#D95F02')) +
+  theme_bw() + labs(x='', y='Fraction of shared TF-treatment-sign events', fill='Persistence relation') + theme(legend.position='bottom')
 RCODE
   end
 
@@ -1788,12 +1848,17 @@ RCODE
   dep :figure_combination_category_counts_bar
   dep :figure_opposite_early_single_agent_tf_signs, :time_point => 1
   dep :figure_opposite_early_single_agent_tf_signs, :time_point => 2
+  dep :figure_tf_activity_pair_scatter, :time_point => 1, :treatment_x => 'PI', :treatment_y => 'FiveZ'
+  dep :figure_tf_activity_pair_scatter, :time_point => 1, :treatment_x => 'PI', :treatment_y => 'PD'
+  dep :figure_tf_activity_pair_scatter, :time_point => 1, :treatment_x => 'FiveZ', :treatment_y => 'PD'
   dep :figure_neko_match_fraction_bar
   dep :figure_neko_counts_bar
   dep :figure_self_consistency_match_fraction_bar
   dep :figure_self_consistency_counts_bar
   dep :figure_dynamic_vs_nondynamic_earliest_detection
+  dep :figure_dynamic_vs_nondynamic_shared_timing_fraction
   dep :figure_dynamic_vs_nondynamic_persistence
+  dep :figure_dynamic_vs_nondynamic_shared_persistence_comparison
   dep :figure_sequence_edge_counts_bar
   dep :figure_three_layer_interpretation_scaffold
   task :figures_manuscript => :array do
@@ -1813,6 +1878,11 @@ RCODE
         tags << "T#{inputs[:time_point]}"
         tags << inputs[:sign_mode]
       elsif task_name == 'figure_opposite_early_single_agent_tf_signs'
+        tags << "T#{inputs[:time_point]}"
+      elsif task_name == 'figure_tf_activity_pair_scatter'
+        tags << inputs[:treatment_x]
+        tags << 'vs'
+        tags << inputs[:treatment_y]
         tags << "T#{inputs[:time_point]}"
       end
       name = ([task_name.sub(/^figure_/, '')] + tags.compact.collect(&:to_s)) * '-'

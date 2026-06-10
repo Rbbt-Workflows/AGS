@@ -1555,4 +1555,169 @@ module AGS
     paths
   end
 
+
+  # Dynamic versus non-dynamic TF activity timing comparisons
+  #
+  # These tasks support the manuscript claim that the dynamic-onset strategy
+  # improves regulatory chronology. The unit of comparison is a
+  # TF-treatment-sign event, where sign is positive or negative inferred TF
+  # activity. For each scheme we record the first sampled window where the event
+  # appears and the number of sampled windows where it is present.
+
+  dep :tf_predictions, :scheme => 'dynamic'
+  dep :tf_predictions, :scheme => 'non-dynamic'
+  task :dynamic_vs_nondynamic_tf_timing_events => :tsv do
+    scheme_data = {}
+    dependencies.each do |dep|
+      scheme = dep.recursive_inputs[:scheme].to_s
+      predictions = dep.load
+      first = {}
+      persistence = Hash.new(0)
+
+      predictions.through do |tf, values|
+        values = NamedArray.setup(values, predictions.fields)
+        result_treatment_order.each do |treatment|
+          AGS::TIME_POINTS.each do |time_point|
+            field = "#{treatment}-T#{time_point}"
+            next unless predictions.fields.include?(field)
+            activity = numeric_value(values[field], 0.0)
+            next if activity == 0
+            sign = activity > 0 ? 'positive' : 'negative'
+            key = [tf, treatment, sign]
+            first[key] ||= time_point
+            persistence[key] += 1
+          end
+        end
+      end
+      scheme_data[scheme] = {:first => first, :persistence => persistence}
+    end
+
+    dynamic = scheme_data['dynamic'] || {:first => {}, :persistence => {}}
+    nondynamic = scheme_data['non-dynamic'] || {:first => {}, :persistence => {}}
+    keys = (dynamic[:first].keys + nondynamic[:first].keys).uniq
+    time_index = Hash[AGS::TIME_POINTS.each_with_index.to_a]
+
+    tsv = TSV.setup({}, :key_field => 'ID', :fields => %w(TF Treatment Sign DynamicFirst NonDynamicFirst Category DynamicPersistence NonDynamicPersistence), :type => :list, :namespace => AGS.organism)
+    keys.sort_by{|tf,treatment,sign| [standard_treatment_sort_index(treatment), sign, tf] }.each_with_index do |key, i|
+      tf, treatment, sign = key
+      d_first = dynamic[:first][key]
+      n_first = nondynamic[:first][key]
+      category = if d_first && n_first
+                   if time_index[d_first] < time_index[n_first]
+                     'dynamic earlier'
+                   elsif time_index[d_first] > time_index[n_first]
+                     'non-dynamic earlier'
+                   else
+                     'same time'
+                   end
+                 elsif d_first
+                   'dynamic only'
+                 else
+                   'non-dynamic only'
+                 end
+      tsv[i + 1] = [tf, treatment, sign, d_first, n_first, category, dynamic[:persistence][key] || 0, nondynamic[:persistence][key] || 0]
+    end
+    tsv
+  end
+
+  dep :dynamic_vs_nondynamic_tf_timing_events
+  task :dynamic_vs_nondynamic_tf_timing_summary => :tsv do
+    events = step(:dynamic_vs_nondynamic_tf_timing_events).load
+    counts = Hash.new(0)
+    category_order = ['dynamic earlier', 'same time', 'non-dynamic earlier', 'dynamic only', 'non-dynamic only']
+    events.through do |id, values|
+      values = NamedArray.setup(values, events.fields)
+      treatment = scalar_value(values['Treatment'])
+      sign = scalar_value(values['Sign'])
+      category = scalar_value(values['Category'])
+      counts[[treatment, sign, category]] += 1
+      counts[[treatment, 'both', category]] += 1
+    end
+
+    tsv = TSV.setup({}, :key_field => 'ID', :fields => %w(Treatment Sign Category TFEvents SharedCategory), :type => :list, :namespace => AGS.organism)
+    id = 0
+    result_treatment_order.each do |treatment|
+      %w(positive negative both).each do |sign|
+        category_order.each do |category|
+          id += 1
+          shared = ['dynamic earlier', 'same time', 'non-dynamic earlier'].include?(category)
+          tsv[id] = [treatment, sign, category, counts[[treatment, sign, category]] || 0, shared]
+        end
+      end
+    end
+    tsv
+  end
+
+  dep :dynamic_vs_nondynamic_tf_timing_events
+  task :dynamic_vs_nondynamic_tf_persistence_distribution => :tsv do
+    events = step(:dynamic_vs_nondynamic_tf_timing_events).load
+    counts = Hash.new(0)
+    events.through do |id, values|
+      values = NamedArray.setup(values, events.fields)
+      treatment = scalar_value(values['Treatment'])
+      sign = scalar_value(values['Sign'])
+      d_persistence = scalar_value(values['DynamicPersistence']).to_i
+      n_persistence = scalar_value(values['NonDynamicPersistence']).to_i
+      if d_persistence > 0
+        counts[['dynamic', treatment, sign, d_persistence]] += 1
+        counts[['dynamic', treatment, 'both', d_persistence]] += 1
+      end
+      if n_persistence > 0
+        counts[['non-dynamic', treatment, sign, n_persistence]] += 1
+        counts[['non-dynamic', treatment, 'both', n_persistence]] += 1
+      end
+    end
+
+    tsv = TSV.setup({}, :key_field => 'ID', :fields => %w(Scheme Treatment Sign ActiveTimepoints TFEvents), :type => :list, :namespace => AGS.organism)
+    id = 0
+    %w(dynamic non-dynamic).each do |scheme|
+      result_treatment_order.each do |treatment|
+        %w(positive negative both).each do |sign|
+          (1..AGS::TIME_POINTS.length).each do |active_timepoints|
+            id += 1
+            tsv[id] = [scheme, treatment, sign, active_timepoints, counts[[scheme, treatment, sign, active_timepoints]] || 0]
+          end
+        end
+      end
+    end
+    tsv
+  end
+
+  dep :dynamic_vs_nondynamic_tf_timing_events
+  task :dynamic_vs_nondynamic_tf_persistence_comparison => :tsv do
+    events = step(:dynamic_vs_nondynamic_tf_timing_events).load
+    counts = Hash.new(0)
+    events.through do |id, values|
+      values = NamedArray.setup(values, events.fields)
+      d_first = scalar_value(values['DynamicFirst'])
+      n_first = scalar_value(values['NonDynamicFirst'])
+      next if d_first.nil? || d_first.to_s.empty? || n_first.nil? || n_first.to_s.empty?
+      treatment = scalar_value(values['Treatment'])
+      sign = scalar_value(values['Sign'])
+      d_persistence = scalar_value(values['DynamicPersistence']).to_i
+      n_persistence = scalar_value(values['NonDynamicPersistence']).to_i
+      category = if d_persistence < n_persistence
+                   'dynamic shorter'
+                 elsif d_persistence > n_persistence
+                   'non-dynamic shorter'
+                 else
+                   'same persistence'
+                 end
+      counts[[treatment, sign, category]] += 1
+      counts[[treatment, 'both', category]] += 1
+    end
+
+    tsv = TSV.setup({}, :key_field => 'ID', :fields => %w(Treatment Sign Category TFEvents), :type => :list, :namespace => AGS.organism)
+    id = 0
+    result_treatment_order.each do |treatment|
+      %w(positive negative both).each do |sign|
+        ['dynamic shorter', 'same persistence', 'non-dynamic shorter'].each do |category|
+          id += 1
+          tsv[id] = [treatment, sign, category, counts[[treatment, sign, category]] || 0]
+        end
+      end
+    end
+    tsv
+  end
+
 end
