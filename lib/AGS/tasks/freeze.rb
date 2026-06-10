@@ -68,13 +68,13 @@ module AGS
   dep :tf_target_edge_consistency_summary
   dep :combination_tf_categories
   dep :combination_tf_category_counts
-  dep :gprofiler_suite
+  dep :functional_enrichment_suite
   task :freeze => :array do
     dependencies.each do |dep|
       other = dependencies.select{|d| d.task_name == dep.task_name }.length > 1
       filename = case dep.task_name
-                 when :gprofiler_suite
-                   Open.cp dep.files_dir, file("gprofiler")
+                 when :functional_enrichment_suite
+                   Open.cp dep.files_dir, file("functional_enrichment_suite")
                  when :valid_TFs
                    'valid_TFs.list'
                  when :list_tfs

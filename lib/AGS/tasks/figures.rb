@@ -468,7 +468,7 @@ RCODE
   input :adjusted_pvalue_threshold, :float, 'FDR cutoff for display', 0.05
   input :qvalue_strong, :float, 'Darker shade cutoff', 1e-4
   input :qvalue_very_strong, :float, 'Darkest shade cutoff', 1e-6
-  input :reduced_terms, :boolean, 'Use redundancy-reduced enrichment table', true
+  input :reduced_terms, :boolean, 'Use redundancy-reduced enrichment table', false
   dep :functional_enrichment_reduced do |jobname, options|
     options.merge(:query_type => options[:query_type], :annotation => options[:annotation], :adjusted_pvalue_threshold => options[:adjusted_pvalue_threshold])
   end

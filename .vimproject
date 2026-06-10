@@ -183,8 +183,23 @@ AGS=/$PWD filter="*.rb *.rake Rakefile *.rdoc *.R *.sh *.js *.haml *.sass *.txt 
    results_prep_1_freeze
 
    results_figures
+   results_figures_gepeto
+
+   results_section-v3-comments
+
+   results_section-v4-goslim
+   results_section-v4
+   results_section-v4-figures_missing
+   results_section-v4-tf_inferrence_dynamic
+
+   results_section-v4-enrichment_updates
+
+   results_section-v4_draft_090626.docx.md
+
+   ai_interpretaion-v1
 
   }
+
  }
 
  paper=paper filter="*"{
