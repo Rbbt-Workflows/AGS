@@ -1400,4 +1400,127 @@ module AGS
     tsv
   end
 
+
+  dep :tf_predictions
+  task :dmso_reference_tf_activity_similarity => :tsv do
+    predictions = step(:tf_predictions).load
+    refs = ['DMSO-T8', 'DMSO-T24']
+    inhibitor_treatments = result_treatment_order.reject{|treatment| treatment == 'DMSO' }
+
+    sign = lambda do |value|
+      value = value.to_f
+      value > 0 ? 1 : (value < 0 ? -1 : 0)
+    end
+
+    pearson = lambda do |a, b|
+      n = a.length
+      return nil if n == 0
+      ma = a.inject(0.0, &:+) / n
+      mb = b.inject(0.0, &:+) / n
+      va = a.collect{|v| (v - ma) ** 2 }.inject(0.0, &:+)
+      vb = b.collect{|v| (v - mb) ** 2 }.inject(0.0, &:+)
+      return nil if va == 0 || vb == 0
+      cov = a.zip(b).collect{|x,y| (x - ma) * (y - mb) }.inject(0.0, &:+)
+      cov / Math.sqrt(va * vb)
+    end
+
+    cosine = lambda do |a, b|
+      na = Math.sqrt(a.collect{|v| v ** 2 }.inject(0.0, &:+))
+      nb = Math.sqrt(b.collect{|v| v ** 2 }.inject(0.0, &:+))
+      return nil if na == 0 || nb == 0
+      a.zip(b).collect{|x,y| x * y }.inject(0.0, &:+) / (na * nb)
+    end
+
+    fields = %w(Reference InhibitorT24 ReferenceActive InhibitorActive SharedActive UnionActive Jaccard SharedSameSign SharedOppositeSign SharedSignConcordance InhibitorActiveAlsoReferenceFraction ReferenceActiveReappearsFraction PearsonAllTFs CosineAllTFs PearsonUnionActive CosineUnionActive)
+    tsv = TSV.setup({}, :key_field => 'ID', :fields => fields, :type => :list, :namespace => AGS.organism)
+    id = 0
+
+    refs.each do |ref_field|
+      next unless predictions.fields.include?(ref_field)
+      inhibitor_treatments.each do |treatment|
+        inhib_field = "#{treatment}-T24"
+        next unless predictions.fields.include?(inhib_field)
+
+        ref_values = {}
+        inhib_values = {}
+        predictions.through do |tf, values|
+          values = NamedArray.setup(values, predictions.fields)
+          ref_values[tf] = numeric_value(values[ref_field], 0.0)
+          inhib_values[tf] = numeric_value(values[inhib_field], 0.0)
+        end
+
+        ref_active = ref_values.keys.select{|tf| ref_values[tf] != 0 }
+        inhib_active = inhib_values.keys.select{|tf| inhib_values[tf] != 0 }
+        shared = ref_active & inhib_active
+        union = ref_active | inhib_active
+        same = shared.count{|tf| sign.call(ref_values[tf]) == sign.call(inhib_values[tf]) }
+        opposite = shared.count{|tf| sign.call(ref_values[tf]) == - sign.call(inhib_values[tf]) }
+
+        all_tfs = predictions.keys
+        ref_all = all_tfs.collect{|tf| ref_values[tf] || 0.0 }
+        inhib_all = all_tfs.collect{|tf| inhib_values[tf] || 0.0 }
+        ref_union = union.collect{|tf| ref_values[tf] || 0.0 }
+        inhib_union = union.collect{|tf| inhib_values[tf] || 0.0 }
+
+        id += 1
+        tsv[id] = [ref_field, inhib_field, ref_active.length, inhib_active.length, shared.length, union.length,
+                   union.empty? ? nil : shared.length.to_f / union.length,
+                   same, opposite,
+                   shared.empty? ? nil : same.to_f / shared.length,
+                   inhib_active.empty? ? nil : shared.length.to_f / inhib_active.length,
+                   ref_active.empty? ? nil : shared.length.to_f / ref_active.length,
+                   pearson.call(ref_all, inhib_all), cosine.call(ref_all, inhib_all),
+                   union.length > 1 ? pearson.call(ref_union, inhib_union) : nil,
+                   union.length > 1 ? cosine.call(ref_union, inhib_union) : nil]
+      end
+    end
+    tsv
+  end
+
+  dep :tf_predictions
+  task :dmso_reference_tf_activity_overlap_details => :tsv do
+    predictions = step(:tf_predictions).load
+    refs = ['DMSO-T8', 'DMSO-T24']
+    inhibitor_treatments = result_treatment_order.reject{|treatment| treatment == 'DMSO' }
+
+    sign = lambda do |value|
+      value = value.to_f
+      value > 0 ? 'positive' : (value < 0 ? 'negative' : 'inactive')
+    end
+
+    fields = %w(Reference InhibitorT24 TF ReferenceActivity InhibitorActivity ReferenceSign InhibitorSign Category)
+    dumper = TSV::Dumper.new :key_field => 'ID', :fields => fields, :type => :list, :namespace => AGS.organism
+    dumper.init
+    id = 0
+
+    TSV.traverse predictions, :into => dumper, :bar => self.progress_bar('Comparing DMSO reference and inhibitor T24 TF scoreboards') do |tf, values|
+      values = NamedArray.setup(values, predictions.fields)
+      res = []
+      refs.each do |ref_field|
+        next unless predictions.fields.include?(ref_field)
+        ref_activity = numeric_value(values[ref_field], 0.0)
+        ref_sign = sign.call(ref_activity)
+        inhibitor_treatments.each do |treatment|
+          inhib_field = "#{treatment}-T24"
+          next unless predictions.fields.include?(inhib_field)
+          inhib_activity = numeric_value(values[inhib_field], 0.0)
+          inhib_sign = sign.call(inhib_activity)
+          next if ref_sign == 'inactive' && inhib_sign == 'inactive'
+          category = if ref_sign != 'inactive' && inhib_sign != 'inactive'
+                       ref_sign == inhib_sign ? 'shared_same_sign' : 'shared_opposite_sign'
+                     elsif ref_sign != 'inactive'
+                       'reference_only'
+                     else
+                       'inhibitor_only'
+                     end
+          id += 1
+          res << [id, [ref_field, inhib_field, tf, ref_activity, inhib_activity, ref_sign, inhib_sign, category]]
+        end
+      end
+      res.extend MultipleResult
+      res
+    end
+  end
+
+
 end
