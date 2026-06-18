@@ -196,18 +196,61 @@ AGS=/$PWD filter="*.rb *.rake Rakefile *.rdoc *.R *.sh *.js *.haml *.sass *.txt 
 
    results_section-v4_draft_090626.docx.md
 
-   ai_interpretaion-v1
+   ai_interpretation-v1-themes
 
+   ai_interpretation-v1-mechanisms
+
+   ai_interpretation-v2-mechanisms
+
+   ai_interpretation-v1-network
+
+   results_section-NAR-v1
+
+   results_section-v5.DMSO
+   results_section-v5
+   results_draft_150626.docx.md
+
+   results_section-v5.deep_m6
+
+   results_section-v5.deep_m7
+
+   results_section-v6
+
+   results_section-v6.images
+
+   results_section-v5.DMSO_for_next_iteration.md
+   results_draft-16062026_for_next_iteration.md
+
+   ai_interpretation-v2-mechanisms.validation
+
+   ai_interpretation.v2-mechanisms.image.rb
+
+   heatmap_investigation
   }
 
  }
 
  paper=paper filter="*"{
+  discussion_draft_17062026.docx
+  discussion_draft_17062026.md
+  methods_draft_01062026.md
+  methods_draft_17062026.docx
+  methods_draft_17062026.md
   methods_main_nar.md
   methods_supplementary_nar.md
+  proteomics_validation_of_mechanistic_themes.md
   references_methods.md
   results_data_guide.md
+  results_draft-16062026.docx
+  results_draft-16062026.md
   results_draft.md
+  results_draft_17062026.docx
+  results_draft_17062026.md
+  supplemental_DMSO.docx
+  supplemental_DMSO.md
+  tf_activity_themes_actionable_mechanisms.md
+  tf_thematic_identification_step1.md
+  tf_activity_themes_actionable_mechanisms_enriched.md
  }
  lib=lib {
   knowledge_base=knowledge_base{

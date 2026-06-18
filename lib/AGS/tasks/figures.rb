@@ -141,12 +141,34 @@ module AGS
     end.flatten.select{|field| tsv.fields.include?(field) }
   end
 
-  def self.figure_ggplot_svg(tsv, r_code, width = 8, height = 5)
+  #def self.figure_ggplot_svg(tsv, r_code, width = 8, height = 5)
+  #  R::SVG.ggplot tsv, r_code, width, height
+  #end
+
+  #def self.figure_base_svg(file, tsv, r_code, width = 11, height = 8)
+  #  R::SVG.plot file, tsv, r_code, width, height
+  #  nil
+  #end
+
+  helper :figure_ggplot do |tsv,r_code,width=8,height=5|
+    Open.mkdir files_dir
+    R::PNG.ggplot file('plot.png'), tsv, r_code, width, height
     R::SVG.ggplot tsv, r_code, width, height
   end
 
-  def self.figure_base_svg(file, tsv, r_code, width = 11, height = 8)
-    R::SVG.plot file, tsv, r_code, width, height
+  helper :figure_base do |tsv,r_code,width=11,height=8|
+    Open.mkdir files_dir
+    pw = width
+    ph = height
+    begin
+      Misc.insist do
+        R::PNG.plot file('plot.png'), tsv, r_code, pw, ph
+        pw *= 2 
+        ph *= 2
+      end
+    rescue
+    end
+    R::SVG.plot self.tmp_path, tsv, r_code, width, height
     nil
   end
 
@@ -236,10 +258,13 @@ module AGS
     [[value.to_f, cap.to_f].min, -cap.to_f].max
   end
 
+  helper :figure do |tsv, code, w, h|
+  end
+
   extension :svg
   task :figure_overall_intermediate_phenotypes => :text do
     tsv = AGS.figure_build_tsv([['one', 1]], 'ID', ['Value'])
-    AGS.figure_ggplot_svg(tsv, <<-RCODE, 9, 4)
+    figure_ggplot(tsv, <<-RCODE, 9, 4)
 ggplot(data.frame(x=1,y=1), aes(x,y)) +
   xlim(0, 10) + ylim(0, 5) +
   annotate('rect', xmin=0.4, xmax=2.4, ymin=2.1, ymax=3.5, fill='#F0F0F0', color='grey30') +
@@ -261,7 +286,7 @@ RCODE
   extension :svg
   task :figure_overall_dynamic_workflow => :text do
     tsv = AGS.figure_build_tsv([['one', 1]], 'ID', ['Value'])
-    AGS.figure_ggplot_svg(tsv, <<-RCODE, 10, 4.5)
+    figure_ggplot(tsv, <<-RCODE, 10, 4.5)
 ggplot(data.frame(x=1,y=1), aes(x,y)) +
   xlim(0, 10) + ylim(0, 5) +
   annotate('rect', xmin=0.3, xmax=1.8, ymin=2.4, ymax=3.5, fill='#F0F0F0', color='grey30') +
@@ -289,7 +314,7 @@ RCODE
     fc0 = step(:fold_changes).load.transpose('Associated Gene Name')
     fields = AGS.figure_context_fields('FC').select{|field| fc0.fields.include?(field) }
     data_tsv = fc0.reorder('Associated Gene Name', fields)
-    AGS.figure_ggplot_svg(data_tsv, <<-RCODE, 7, 5.5)
+    figure_ggplot(data_tsv, <<-RCODE, 7, 5.5)
 mat <- data[, c(#{fields.collect{|f| "'#{f}'"} * ', '}), drop=FALSE]
 mat[] <- lapply(mat, as.numeric)
 mat[is.na(mat)] <- 0
@@ -319,7 +344,7 @@ RCODE
     fc0 = step(:fold_changes).load.transpose('Associated Gene Name')
     fields = AGS.figure_context_fields('FC').select{|field| fc0.fields.include?(field) }
     data_tsv = fc0.reorder('Associated Gene Name', fields)
-    AGS.figure_ggplot_svg(data_tsv, <<-RCODE, 7, 5.5)
+    figure_ggplot(data_tsv, <<-RCODE, 7, 5.5)
 mat <- data[, c(#{fields.collect{|f| "'#{f}'"} * ', '}), drop=FALSE]
 mat[] <- lapply(mat, as.numeric)
 mat[is.na(mat)] <- 0
@@ -348,7 +373,7 @@ RCODE
     fc0 = step(:fold_changes).load.transpose('Associated Gene Name')
     fields = AGS.figure_context_fields('FC').select{|field| fc0.fields.include?(field) }
     data_tsv = fc0.reorder('Associated Gene Name', fields)
-    AGS.figure_base_svg(self.tmp_path, data_tsv, <<-RCODE, 11, 10)
+    figure_base(data_tsv, <<-RCODE, 11, 10)
 rbbt.require('gplots')
 mat <- data[, c(#{fields.collect{|f| "'#{f}'"} * ', '}), drop=FALSE]
 mat[] <- lapply(mat, as.numeric)
@@ -361,7 +386,7 @@ labs <- sub('^FC_', '', labs)
 labs <- gsub('INT_FiveZ_PI', '5Z+PI', labs)
 labs <- gsub('INT_PD_PI', 'PD+PI', labs)
 labs <- gsub('FiveZ', '5Z', labs)
-labs <- gsub('\\.T', ' T', labs)
+#labs <- gsub('\\.T', ' T', labs)
 rownames(dist_mat) <- labs
 colnames(dist_mat) <- labs
 heatmap.2(dist_mat, trace='none', col=colorRampPalette(c('white','#2166AC'))(101),
@@ -373,7 +398,7 @@ RCODE
   extension :svg
   task :figure_de_counts_fc0_bar => :text do
     counts = step(:de_gene_counts_fc0).load
-    AGS.figure_ggplot_svg(counts, <<-RCODE, 10, 5)
+    figure_ggplot(counts, <<-RCODE, 10, 5)
 data <- subset(data, Direction == 'both')
 data$Time <- factor(data$Time, levels=c(1,2,4,8,24), labels=c('1h','2h','4h','8h','24h'))
 data$TreatmentLabel <- factor(data$Treatment, levels=c(#{FIGURE_TREATMENT_ORDER.collect{|t| "'#{t}'"} * ','}), labels=c(#{AGS.figure_treatment_levels}))
@@ -388,7 +413,7 @@ RCODE
   extension :svg
   task :figure_de_counts_fc1_bar => :text do
     counts = step(:interval_de_gene_counts_fc1).load
-    AGS.figure_ggplot_svg(counts, <<-RCODE, 10, 5)
+    figure_ggplot(counts, <<-RCODE, 10, 5)
 data <- subset(data, Direction == 'both')
 data$Time <- factor(data$Time, levels=c(1,2,4,8,24), labels=c('1h','2h','4h','8h','24h'))
 data$TreatmentLabel <- factor(data$Treatment, levels=c(#{FIGURE_TREATMENT_ORDER.collect{|t| "'#{t}'"} * ','}), labels=c(#{AGS.figure_treatment_levels}))
@@ -403,7 +428,7 @@ RCODE
   extension :svg
   task :figure_dynamic_onset_first_bar => :text do
     tsv = step(:onset_first_counts).load
-    AGS.figure_ggplot_svg(tsv, <<-RCODE, 10, 5)
+    figure_ggplot(tsv, <<-RCODE, 10, 5)
 data <- subset(data, Direction != 'both')
 data$Time <- factor(data$Time, levels=c(1,2,4,8,24), labels=c('1h','2h','4h','8h','24h'))
 data$TreatmentLabel <- factor(data$Treatment, levels=c(#{FIGURE_TREATMENT_ORDER.collect{|t| "'#{t}'"} * ','}), labels=c(#{AGS.figure_treatment_levels}))
@@ -419,7 +444,7 @@ RCODE
   extension :svg
   task :figure_dynamic_onset_episode_bar => :text do
     tsv = step(:onset_episode_counts).load
-    AGS.figure_ggplot_svg(tsv, <<-RCODE, 10, 5)
+    figure_ggplot(tsv, <<-RCODE, 10, 5)
 data <- subset(data, Direction != 'both')
 data$Time <- factor(data$Time, levels=c(1,2,4,8,24), labels=c('1h','2h','4h','8h','24h'))
 data$TreatmentLabel <- factor(data$Treatment, levels=c(#{FIGURE_TREATMENT_ORDER.collect{|t| "'#{t}'"} * ','}), labels=c(#{AGS.figure_treatment_levels}))
@@ -435,7 +460,7 @@ RCODE
   extension :svg
   task :figure_dynamic_onset_switch_summary => :text do
     tsv = step(:onset_direction_switch_summary).load
-    AGS.figure_ggplot_svg(tsv, <<-RCODE, 8, 5)
+    figure_ggplot(tsv, <<-RCODE, 8, 5)
 data$TreatmentLabel <- factor(data$Treatment, levels=c(#{FIGURE_TREATMENT_ORDER.collect{|t| "'#{t}'"} * ','}), labels=c(#{AGS.figure_treatment_levels}))
 data$Category <- factor(data$Category, levels=c('unclassified','single_episode','multiple_same_direction','direction_switch'))
 data$Genes <- as.numeric(data$Genes)
@@ -449,7 +474,7 @@ RCODE
   extension :svg
   task :figure_dynamic_vs_interval_onset_relationship => :text do
     tsv = step(:fc1_onset_relationship_summary).load
-    AGS.figure_ggplot_svg(tsv, <<-RCODE, 12, 6)
+    figure_ggplot(tsv, <<-RCODE, 12, 6)
 data$Time <- factor(data$Time, levels=c(1,2,4,8,24), labels=c('1h','2h','4h','8h','24h'))
 data$TreatmentLabel <- factor(data$Treatment, levels=c(#{FIGURE_TREATMENT_ORDER.collect{|t| "'#{t}'"} * ','}), labels=c(#{AGS.figure_treatment_levels}))
 data$Genes <- as.numeric(data$Genes)
@@ -534,7 +559,7 @@ RCODE
     end
     plot_tsv = AGS.figure_build_tsv(rows, 'ID', %w(Term TermIndex TermGroup Treatment TreatmentLabel Time TimeLabel X InnerLabel InnerColor GroupLabel GroupColor GroupKey Direction FillClass QValue Intersection QuerySize TermSize))
     fill_scale = AGS.figure_enrichment_fill_scale
-    AGS.figure_ggplot_svg(plot_tsv, <<-RCODE, 15, [5, selected_terms.length * 0.28 + 2.8].max)
+    figure_ggplot(plot_tsv, <<-RCODE, 15, [5, selected_terms.length * 0.28 + 2.8].max)
 data$TermIndex <- as.numeric(data$TermIndex)
 data$X <- as.numeric(data$X)
 data$QValue <- as.numeric(data$QValue)
@@ -587,7 +612,7 @@ RCODE
       [i + 1, term, counts[term][2], counts[term][0], -Math.log10([counts[term][1], 1e-300].max)]
     end
     plot_tsv = AGS.figure_build_tsv(rows, 'ID', %w(Term TermGroup Contexts BestNegLogQ))
-    AGS.figure_ggplot_svg(plot_tsv, <<-RCODE, 8, 8)
+    figure_ggplot(plot_tsv, <<-RCODE, 8, 8)
 data$Contexts <- as.numeric(data$Contexts)
 data$BestNegLogQ <- as.numeric(data$BestNegLogQ)
 data$Term <- factor(data$Term, levels=rev(data$Term[order(data$Contexts, data$BestNegLogQ)]))
@@ -601,7 +626,7 @@ RCODE
   extension :svg
   task :figure_tf_activity_counts_bar => :text do
     tsv = step(:tf_activity_call_counts_by_scheme).load
-    AGS.figure_ggplot_svg(tsv, <<-RCODE, 10, 5)
+    figure_ggplot(tsv, <<-RCODE, 10, 5)
 data <- subset(data, Sign != 'both')
 data$Time <- factor(data$Time, levels=c(1,2,4,8,24), labels=c('1h','2h','4h','8h','24h'))
 data$TreatmentLabel <- factor(data$Treatment, levels=c(#{FIGURE_TREATMENT_ORDER.collect{|t| "'#{t}'"} * ','}), labels=c(#{AGS.figure_treatment_levels}))
@@ -619,7 +644,7 @@ RCODE
     matrix = step(:tf_activity_heatmap_matrix).load
     fields = AGS.figure_tf_context_fields(matrix)
     data_tsv = matrix.reorder('Associated Gene Name', fields)
-    AGS.figure_ggplot_svg(data_tsv, <<-RCODE, 7, 5.5)
+    figure_ggplot(data_tsv, <<-RCODE, 7, 5.5)
 mat <- data[, c(#{fields.collect{|f| "'#{f}'"} * ', '}), drop=FALSE]
 mat[] <- lapply(mat, as.numeric)
 mat[is.na(mat)] <- 0
@@ -643,7 +668,7 @@ RCODE
   extension :svg
   task :figure_tf_activity_sign_balance_bar => :text do
     tsv = step(:tf_activity_call_counts_by_scheme).load
-    AGS.figure_ggplot_svg(tsv, <<-RCODE, 9, 5)
+    figure_ggplot(tsv, <<-RCODE, 9, 5)
 data <- subset(data, Sign != 'both')
 data$Time <- factor(data$Time, levels=c(1,2,4,8,24), labels=c('1h','2h','4h','8h','24h'))
 data$TreatmentLabel <- factor(data$Treatment, levels=c(#{FIGURE_TREATMENT_ORDER.collect{|t| "'#{t}'"} * ','}), labels=c(#{AGS.figure_treatment_levels}))
@@ -658,7 +683,7 @@ RCODE
   input :normalization, :select, 'Normalization', 'row_zscore', :select_options => %w(raw row_zscore column_zscore)
   input :max_abs, :float, 'Maximum absolute value for color scale', 3.0
   input :cluster_columns, :boolean, 'Cluster columns and show column dendrogram', false
-  input :show_tf_labels, :boolean, 'Show TF labels', false
+  input :show_tf_labels, :boolean, 'Show TF labels', true
   dep :tf_activity_heatmap_matrix, :scheme => :placeholder, :normalization => :placeholder do |jobname, options|
     { :scheme => options[:scheme], :normalization => options[:normalization] }
   end
@@ -670,7 +695,7 @@ RCODE
     dendrogram = cluster_columns ? 'both' : 'row'
     colv = cluster_columns ? 'TRUE' : 'FALSE'
     labrow = show_tf_labels ? 'rownames(mat)' : 'rep("", nrow(mat))'
-    AGS.figure_base_svg(self.tmp_path, data_tsv, <<-RCODE, 12, 10)
+    figure_base(data_tsv, <<-RCODE, 12, 10)
 rbbt.require('gplots')
 mat <- data[, c(#{fields.collect{|f| "'#{f}'"} * ', '}), drop=FALSE]
 mat[] <- lapply(mat, as.numeric)
@@ -725,7 +750,7 @@ RCODE
     end
     plot_tsv = AGS.figure_build_tsv(rows, 'ID', %w(Pattern Display Count))
     title = "#{AGS.figure_treatment_label(combination)} T#{time_point} #{sign_mode} TF activity exact intersections"
-    AGS.figure_ggplot_svg(plot_tsv, <<-RCODE, 8, 5)
+    figure_ggplot(plot_tsv, <<-RCODE, 8, 5)
 data$Count <- as.numeric(data$Count)
 data <- data[order(data$Count, decreasing=TRUE),]
 data$Display <- factor(data$Display, levels=rev(data$Display))
@@ -738,7 +763,7 @@ RCODE
   extension :svg
   task :figure_combination_category_counts_bar => :text do
     tsv = step(:combination_tf_category_counts).load
-    AGS.figure_ggplot_svg(tsv, <<-RCODE, 10, 5)
+    figure_ggplot(tsv, <<-RCODE, 10, 5)
 data$Time <- factor(data$Time, levels=c(1,2,4,8,24), labels=c('1h','2h','4h','8h','24h'))
 data$CombinationLabel <- factor(data$Combination, levels=c('INT_FiveZ_PI','INT_PD_PI'), labels=c('5Z+PI','PD+PI'))
 data$TFActivityCalls <- as.numeric(data$TFActivityCalls)
@@ -775,7 +800,7 @@ RCODE
     end
     rows = counts.each_with_index.collect{|((pair, category), count), i| [i + 1, pair, category, count] }
     plot_tsv = AGS.figure_build_tsv(rows, 'ID', %w(Pair Category Count))
-    AGS.figure_ggplot_svg(plot_tsv, <<-RCODE, 8, 5)
+    figure_ggplot(plot_tsv, <<-RCODE, 8, 5)
 data$Count <- as.numeric(data$Count)
 ggplot(data, aes(Pair, Count, fill=Category)) + geom_col(position='stack') + coord_flip() +
   scale_fill_brewer(palette='Set2') + theme_bw() + labs(x='', y='TFs', fill='Sign-aware overlap', title='Early single-agent TF signs at T#{time_point}') +
@@ -811,7 +836,7 @@ RCODE
     top = rows.sort_by{|row| -row[3] }.first(label_tfs.to_i).collect{|row| row[0] }
     rows = rows.each_with_index.collect{|row,i| [i + 1] + row + [top.include?(row[0]) ? row[0] : ''] }
     plot_tsv = AGS.figure_build_tsv(rows, 'ID', %w(TF ActivityX ActivityY Magnitude Category Label))
-    AGS.figure_ggplot_svg(plot_tsv, <<-RCODE, 6, 6)
+    figure_ggplot(plot_tsv, <<-RCODE, 6, 6)
 data$ActivityX <- as.numeric(data$ActivityX)
 data$ActivityY <- as.numeric(data$ActivityY)
 ggplot(data, aes(ActivityX, ActivityY, color=Category)) + geom_hline(yintercept=0, color='grey75') + geom_vline(xintercept=0, color='grey75') +
@@ -824,7 +849,7 @@ RCODE
   extension :svg
   task :figure_neko_match_fraction_bar => :text do
     tsv = step(:neko_dynamic_non_dynamic_summary).load
-    AGS.figure_ggplot_svg(tsv, <<-RCODE, 9, 5)
+    figure_ggplot(tsv, <<-RCODE, 9, 5)
 data <- subset(data, Vetting == 'none')
 data$MatchFraction <- as.numeric(data$MatchFraction)
 data$Target <- factor(data$Target, levels=c('T1','T2','relaxed'))
@@ -838,7 +863,7 @@ RCODE
   extension :svg
   task :figure_neko_counts_bar => :text do
     tsv = step(:neko_dynamic_non_dynamic_summary).load
-    AGS.figure_ggplot_svg(tsv, <<-RCODE, 9, 5)
+    figure_ggplot(tsv, <<-RCODE, 9, 5)
 data <- subset(data, Vetting == 'none')
 data$Match <- as.numeric(data$Match)
 data$Miss <- as.numeric(data$Miss)
@@ -854,7 +879,7 @@ RCODE
   extension :svg
   task :figure_self_consistency_match_fraction_bar => :text do
     tsv = step(:self_consistency_dynamic_non_dynamic_summary).load
-    AGS.figure_ggplot_svg(tsv, <<-RCODE, 10, 5)
+    figure_ggplot(tsv, <<-RCODE, 10, 5)
 data <- subset(data, Vetting == 'none')
 data$Time <- factor(data$Time, levels=c(1,2,4,8,24), labels=c('1h','2h','4h','8h','24h'))
 data$TreatmentLabel <- factor(data$Treatment, levels=c(#{FIGURE_TREATMENT_ORDER.collect{|t| "'#{t}'"} * ','}), labels=c(#{AGS.figure_treatment_levels}))
@@ -869,7 +894,7 @@ RCODE
   extension :svg
   task :figure_self_consistency_counts_bar => :text do
     tsv = step(:self_consistency_dynamic_non_dynamic_summary).load
-    AGS.figure_ggplot_svg(tsv, <<-RCODE, 10, 5)
+    figure_ggplot(tsv, <<-RCODE, 10, 5)
 data <- subset(data, Vetting == 'none')
 data$Time <- factor(data$Time, levels=c(1,2,4,8,24), labels=c('1h','2h','4h','8h','24h'))
 data$TreatmentLabel <- factor(data$Treatment, levels=c(#{FIGURE_TREATMENT_ORDER.collect{|t| "'#{t}'"} * ','}), labels=c(#{AGS.figure_treatment_levels}))
@@ -922,7 +947,7 @@ RCODE
     end
     rows = counts.each_with_index.collect{|((treatment, sign, category), count), i| [i+1, treatment, sign, category, count] }
     plot_tsv = AGS.figure_build_tsv(rows, 'ID', %w(Treatment Sign Category Count))
-    AGS.figure_ggplot_svg(plot_tsv, <<-RCODE, 10, 5)
+    figure_ggplot(plot_tsv, <<-RCODE, 10, 5)
 data$TreatmentLabel <- factor(data$Treatment, levels=c(#{FIGURE_TREATMENT_ORDER.collect{|t| "'#{t}'"} * ','}), labels=c(#{AGS.figure_treatment_levels}))
 data$Count <- as.numeric(data$Count)
 ggplot(data, aes(TreatmentLabel, Count, fill=Category)) + geom_col() + facet_wrap(~Sign, nrow=1) +
@@ -958,7 +983,7 @@ RCODE
       end
     end
     plot_tsv = AGS.figure_build_tsv(rows, 'ID', %w(Scheme Treatment Sign ActiveTimepoints))
-    AGS.figure_ggplot_svg(plot_tsv, <<-RCODE, 9, 5)
+    figure_ggplot(plot_tsv, <<-RCODE, 9, 5)
 data$ActiveTimepoints <- as.numeric(data$ActiveTimepoints)
 data$TreatmentLabel <- factor(data$Treatment, levels=c(#{FIGURE_TREATMENT_ORDER.collect{|t| "'#{t}'"} * ','}), labels=c(#{AGS.figure_treatment_levels}))
 ggplot(data, aes(factor(ActiveTimepoints), fill=Scheme)) + geom_bar(position='dodge') + facet_grid(Sign ~ TreatmentLabel) +
@@ -981,7 +1006,7 @@ RCODE
       rows << [id, treatment, 'both TFs self-consistent', AGS.figure_safe_int(values['Edges with both TFs self-consistent'], 0)]
     end
     plot_tsv = AGS.figure_build_tsv(rows, 'ID', %w(Treatment Class Count))
-    AGS.figure_ggplot_svg(plot_tsv, <<-RCODE, 8, 5)
+    figure_ggplot(plot_tsv, <<-RCODE, 8, 5)
 data$Count <- as.numeric(data$Count)
 data$TreatmentLabel <- factor(data$Treatment, levels=c(#{FIGURE_TREATMENT_ORDER.collect{|t| "'#{t}'"} * ','}), labels=c(#{AGS.figure_treatment_levels}))
 ggplot(data, aes(TreatmentLabel, Count, fill=Class)) + geom_col(position='dodge') + coord_flip() +
@@ -993,7 +1018,7 @@ RCODE
   extension :svg
   task :figure_three_layer_interpretation_scaffold => :text do
     tsv = AGS.figure_build_tsv([['one', 1]], 'ID', ['Value'])
-    AGS.figure_ggplot_svg(tsv, <<-RCODE, 10, 5)
+    figure_ggplot(tsv, <<-RCODE, 10, 5)
 ggplot(data.frame(x=1,y=1), aes(x,y)) + xlim(0,10) + ylim(0,5) +
   annotate('rect', xmin=0.6, xmax=3.0, ymin=3.2, ymax=4.4, fill='#DDEBF7', color='grey30') +
   annotate('rect', xmin=3.8, xmax=6.2, ymin=3.2, ymax=4.4, fill='#FFF2CC', color='grey30') +
@@ -1058,6 +1083,7 @@ RCODE
     FileUtils.rm_rf(files_dir) if File.directory?(files_dir)
     FileUtils.mkdir_p(files_dir)
     dependencies.each do |dep|
+      next unless dep.done?
       inputs = dep.recursive_inputs
       task_name = dep.task_name.to_s
       tags = []
@@ -1086,7 +1112,9 @@ RCODE
       end
       name = ([task_name.sub(/^figure_/, '')] + tags.compact.collect(&:to_s)) * '-'
       target = file(name + '.svg')
-      Open.write(target, dep.load)
+      png = file(name + '.png')
+      Open.cp(dep.path, target)
+      Open.cp(dep.file('plot.png'), png) if dep.file('plot.png').exists?
     end
     files
   end
