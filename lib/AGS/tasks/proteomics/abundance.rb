@@ -1,7 +1,8 @@
 module AGS
 
   PROTEOMICS_TIMES = %w(0.5 2 8) unless const_defined?(:PROTEOMICS_TIMES)
-  PROTEOMICS_TREATMENTS = %w(PI PD FiveZ INT_PD_PI INT_FiveZ_PI) unless const_defined?(:PROTEOMICS_TREATMENTS)
+  PROTEOMICS_TREATMENTS = %w(DMSO PI PD FiveZ INT_PD_PI INT_FiveZ_PI) unless const_defined?(:PROTEOMICS_TREATMENTS)
+  PROTEOMICS_DRUG_TREATMENTS = %w(PI PD FiveZ INT_PD_PI INT_FiveZ_PI) unless const_defined?(:PROTEOMICS_DRUG_TREATMENTS)
 
   helper :proteomics_data_dir do
     Path.setup('data/proteomics')
@@ -27,25 +28,29 @@ module AGS
 
   helper :proteomics_normalize_treatment do |treatment|
     case treatment.to_s
-    when '5Z', 'FiveZ'
+    when '5Z', 'FiveZ', 'X5Z'
       'FiveZ'
-    when 'PIPD', 'INT_PD_PI'
+    when 'PIPD', 'INT_PD_PI', 'XPIPD'
       'INT_PD_PI'
-    when 'PI5Z', 'INT_FiveZ_PI'
+    when 'PI5Z', 'INT_FiveZ_PI', 'XPI5Z'
       'INT_FiveZ_PI'
+    when 'CTRL', 'CONTROL', 'DMSO', 'XDMSO'
+      'DMSO'
     else
-      treatment.to_s
+      treatment.to_s.sub(/^X/, '')
     end
   end
 
   helper :proteomics_raw_treatment_code do |treatment|
-    case treatment.to_s
+    case proteomics_normalize_treatment(treatment)
     when 'FiveZ'
       '5Z'
     when 'INT_PD_PI'
       'PIPD'
     when 'INT_FiveZ_PI'
       'PI5Z'
+    when 'DMSO'
+      'DMSO'
     else
       treatment.to_s
     end
@@ -53,6 +58,52 @@ module AGS
 
   helper :proteomics_normalize_time do |time|
     time.to_s.sub('0-5', '0.5').sub('0_5', '0.5').sub(/h$/, '')
+  end
+
+  helper :proteomics_time_label do |time|
+    proteomics_normalize_time(time) + 'h'
+  end
+
+  helper :proteomics_prediction_sign do |prediction|
+    p = proteomics_float(prediction)
+    return 0 if p.nil? || p == 0
+    p > 0 ? 1 : -1
+  end
+
+  helper :proteomics_observed_sign do |value|
+    v = proteomics_float(value)
+    return 0 if v.nil? || v == 0
+    v > 0 ? 1 : -1
+  end
+
+  helper :proteomics_direction_from_sign do |sign|
+    case sign.to_i
+    when 1
+      'up'
+    when -1
+      'down'
+    else
+      'no_change'
+    end
+  end
+
+  helper :proteomics_prediction_support do |prediction, observed, effect_threshold=0.25|
+    observed = proteomics_float(observed)
+    return 'not_measured' if observed.nil?
+    pred_sign = proteomics_prediction_sign(prediction)
+    obs_sign = proteomics_observed_sign(observed)
+
+    if pred_sign == 0
+      observed.abs < effect_threshold ? 'no_change_match' : 'unexpected_change'
+    else
+      if observed.abs < effect_threshold
+        'weak_or_no_effect'
+      elsif pred_sign == obs_sign
+        observed.abs >= 0.5 ? 'strong_directional_match' : 'directional_match'
+      else
+        observed.abs >= 0.5 ? 'strong_directional_miss' : 'directional_miss'
+      end
+    end
   end
 
   helper :proteomics_parse_abundance_filename do |path|
@@ -99,20 +150,6 @@ module AGS
     tsv
   end
 
-  task :proteomics_ptm_status => :tsv do
-    tsv = TSV.setup({}, 'ID~File,Lines,DataRows,Status')
-    id = 0
-    proteomics_data_dir['ptm'].glob('*').sort.each do |path|
-      next unless path.file?
-      lines = Open.read(path).split(/\n/)
-      data_rows = lines.reject{|line| line.start_with?('#:') || line.start_with?('#') || line.strip.empty? }.length
-      status = data_rows == 0 ? 'no_data_rows_after_formatting' : 'contains_data_rows'
-      id += 1
-      tsv[id] = [path.to_s, lines.length, data_rows, status]
-    end
-    tsv
-  end
-
   task :proteomics_abundance_long => :tsv do
     fields = %w(Gene Treatment Time TreatmentMean DMSOMean Difference QValue NegLogP TestStatistic Significant TreatmentValidValues DMSOValidValues)
     tsv = TSV.setup({}, 'ID~' + fields * ',')
@@ -132,7 +169,7 @@ module AGS
       treatment_fields = proteomics_abundance_replicate_fields(table.fields, raw_code, false)
       dmso_fields = proteomics_abundance_replicate_fields(table.fields, raw_code, true)
 
-      table.through do |gene, values|
+      table.through bar: self.progress_bar(path) do |gene, values|
         values = NamedArray.setup(values, table.fields)
         id += 1
         treatment_mean = proteomics_mean(treatment_fields.collect{|f| values[f] })
@@ -155,7 +192,7 @@ module AGS
   dep :proteomics_abundance_long
   task :proteomics_abundance_matrix => :tsv do
     long = step(:proteomics_abundance_long).load
-    context_fields = PROTEOMICS_TREATMENTS.collect{|treatment| PROTEOMICS_TIMES.collect{|time| "#{treatment}-T#{time}" } }.flatten
+    context_fields = PROTEOMICS_DRUG_TREATMENTS.collect{|treatment| PROTEOMICS_TIMES.collect{|time| "#{treatment}-T#{time}" } }.flatten
     data = {}
     long.through do |id, values|
       gene = proteomics_scalar(values['Gene'])
@@ -166,8 +203,7 @@ module AGS
       data[gene] ||= Array.new(context_fields.length)
       data[gene][context_fields.index(field)] = proteomics_float(values['Difference'])
     end
-    tsv = TSV.setup(data, :key_field => 'Associated Gene Name', :fields => context_fields, :type => :list, :namespace => AGS.organism)
-    tsv
+    TSV.setup(data, :key_field => 'Associated Gene Name', :fields => context_fields, :type => :list, :namespace => AGS.organism)
   end
 
   dep :proteomics_abundance_long
@@ -203,7 +239,7 @@ module AGS
 
     tsv = TSV.setup({}, 'ID~Treatment,Time,Direction,Proteins')
     id = 0
-    PROTEOMICS_TREATMENTS.each do |treatment|
+    PROTEOMICS_DRUG_TREATMENTS.each do |treatment|
       PROTEOMICS_TIMES.each do |time|
         %w(up down both).each do |direction|
           id += 1

@@ -223,9 +223,34 @@ AGS=/$PWD filter="*.rb *.rake Rakefile *.rdoc *.R *.sh *.js *.haml *.sass *.txt 
 
    ai_interpretation-v2-mechanisms.validation
 
+   ai_interpretation-v2-mechanisms.benchmark
+
+
+   proteomics_benchmark
+
    ai_interpretation.v2-mechanisms.image.rb
 
    heatmap_investigation
+
+   synergy
+
+   ai_interpretation-v3.themes
+   ai_interpretation-v3.themes.chronology
+   ai_interpretation-v3.mechanisms
+   ai_interpretation-v3.mechanisms.predictions
+   ai_interpretation-v3.mechanisms.benchmark_creation
+   ai_interpretation-v3.mechanisms.benchmark_results
+
+   checks_prots
+
+   ai_chapters
+   ai_chapters.image.rb
+
+   neko_benchmark
+
+   compact_NAR
+
+   NAR_style
   }
 
  }
@@ -251,6 +276,14 @@ AGS=/$PWD filter="*.rb *.rake Rakefile *.rdoc *.R *.sh *.js *.haml *.sass *.txt 
   tf_activity_themes_actionable_mechanisms.md
   tf_thematic_identification_step1.md
   tf_activity_themes_actionable_mechanisms_enriched.md
+
+  ai_themes.md
+  ai_mechanisms.md
+  ai_benchmark_creation.md
+  ai_benchmark.md
+
+  main_nar_compact-v23062026.md
+  references-v23062026.md
  }
  lib=lib {
   knowledge_base=knowledge_base{
@@ -272,7 +305,6 @@ AGS=/$PWD filter="*.rb *.rake Rakefile *.rdoc *.R *.sh *.js *.haml *.sass *.txt 
    tf_type.rb
    gene_info.rb
    INSPEcT=INSPEcT{
-    synthesis.rb
    }
 
    regulome.rb
@@ -298,6 +330,15 @@ AGS=/$PWD filter="*.rb *.rake Rakefile *.rdoc *.R *.sh *.js *.haml *.sass *.txt 
    sequence.rb
 
    rule_variants.rb
+
+   proteomics.rb
+   proteomics=proteomics{
+    abundance.rb
+    ptm.rb
+    comparison.rb
+
+    investigation.rb
+   }
 
    mcp.rb
 
