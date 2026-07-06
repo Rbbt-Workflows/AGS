@@ -1,0 +1,206 @@
+Module	Gene	Comment
+checkpoint_arrest	CDKN1A	p21 cell-cycle arrest
+checkpoint_arrest	CDKN1B	p27 Kip1 arrest
+checkpoint_arrest	GADD45A	DNA damage response arrest
+checkpoint_arrest	GADD45B	DNA damage response arrest
+checkpoint_arrest	TP53	p53 master tumor suppressor
+checkpoint_arrest	MDM2	p53 negative regulator
+checkpoint_arrest	BAX	pro-apoptotic BH3-only effector
+checkpoint_arrest	PMAIP1	NOXA pro-apoptotic
+checkpoint_arrest	BBC3	PUMA pro-apoptotic
+checkpoint_arrest	FAS	death receptor
+checkpoint_arrest	TNFRSF10B	TRAIL receptor DR5
+checkpoint_arrest	SFN	14-3-3 sigma arrest
+checkpoint_arrest	DDB2	DNA damage effector
+checkpoint_arrest	CDKN2A	p16 INK4a
+checkpoint_arrest	CDKN2B	p15 INK4b
+checkpoint_arrest	RB1	retinoblastoma pocket protein
+checkpoint_arrest	RBL1	p107 pocket protein
+checkpoint_arrest	RBL2	p130 pocket protein
+checkpoint_arrest	FOXO1	FOXO stress TF
+checkpoint_arrest	FOXO3	FOXO stress TF
+checkpoint_arrest	BCL2L11	BIM pro-apoptotic
+checkpoint_arrest	PTEN	PI3K-AKT antagonist
+replication_licensing	CDC6	licensing factor
+replication_licensing	CDT1	licensing factor
+replication_licensing	ORC1	origin recognition
+replication_licensing	MCM2	helicase subunit
+replication_licensing	MCM3	helicase subunit
+replication_licensing	MCM4	helicase subunit
+replication_licensing	MCM5	helicase subunit
+replication_licensing	MCM6	helicase subunit
+replication_licensing	MCM7	helicase subunit
+replication_licensing	PCNA	slide clamp
+replication_licensing	GINS1	CMG component
+replication_licensing	GINS2	CMG component
+replication_licensing	GINS3	CMG component
+replication_licensing	GINS4	CMG component
+replication_licensing	POLA1	polymerase alpha
+replication_licensing	POLD1	polymerase delta
+replication_licensing	POLE	polymerase epsilon
+replication_licensing	PRIM1	primase
+replication_licensing	FEN1	Okazaki flap endonuclease
+replication_licensing	CDC45	CMG helicase cofactor
+mitotic_execution	FOXM1	mitotic master TF
+mitotic_execution	PLK1	polo-like kinase
+mitotic_execution	AURKB	aurora B kinase
+mitotic_execution	AURKA	aurora A kinase
+mitotic_execution	BIRC5	survivin
+mitotic_execution	CCNB1	cyclin B1
+mitotic_execution	CCNB2	cyclin B2
+mitotic_execution	CDC25B	Cdk1 phosphatase
+mitotic_execution	CDC25C	Cdk1 phosphatase
+mitotic_execution	CDK1	cyclin-dependent kinase 1
+mitotic_execution	TOP2A	topoisomerase II alpha
+mitotic_execution	UBE2C	APC/C E2
+mitotic_execution	BUB1	spindle checkpoint kinase
+mitotic_execution	NUSAP1	mitotic spindle
+mitotic_execution	KIF20A	kinesin
+mitotic_execution	KIF11	kinesin Eg5
+mitotic_execution	KIF23	kinesin MKLP1
+mitotic_execution	ASPM	mitotic spindle
+mitotic_execution	TPX2	spindle assembly
+mitotic_execution	CDC20	APC/C activator
+mitotic_execution	CCNA2	cyclin A2
+myc_e2f_foxm1	MYC	MYC proto-oncogene TF
+myc_e2f_foxm1	MYCN	N-MYC
+myc_e2f_foxm1	E2F1	E2F activator
+myc_e2f_foxm1	E2F2	E2F activator
+myc_e2f_foxm1	E2F3	E2F activator
+myc_e2f_foxm1	E2F4	E2F repressor
+myc_e2f_foxm1	TFDP1	E2F dimerization partner
+myc_e2f_foxm1	MYBL2	B-myb S-phase TF
+myc_e2f_foxm1	FOXM1	mitotic master TF
+ap1_ets_srf	FOS	AP-1 immediate-early
+ap1_ets_srf	FOSB	AP-1 immediate-early
+ap1_ets_srf	FOSL1	Fra-1 AP-1
+ap1_ets_srf	FOSL2	Fra-2 AP-1
+ap1_ets_srf	JUN	c-Jun AP-1
+ap1_ets_srf	JUNB	JunB AP-1
+ap1_ets_srf	JUND	JunD AP-1
+ap1_ets_srf	ATF2	AP-1/ATF family
+ap1_ets_srf	ATF3	ATF family stress
+ap1_ets_srf	ATF4	ATF family ISR
+ap1_ets_srf	ELK1	ETS ternary complex
+ap1_ets_srf	ELK3	ETS ternary complex
+ap1_ets_srf	ELK4	ETS ternary complex
+ap1_ets_srf	ETS1	ETS family
+ap1_ets_srf	ETS2	ETS family
+ap1_ets_srf	ETV1	ETS family
+ap1_ets_srf	ETV4	ETS family
+ap1_ets_srf	ETV5	ETS family
+ap1_ets_srf	SRF	serum response factor
+ap1_ets_srf	EGR1	immediate-early TF
+ap1_ets_srf	EGR2	immediate-early TF
+ap1_ets_srf	DUSP1	MAPK phosphatase
+ap1_ets_srf	DUSP5	MAPK phosphatase
+ap1_ets_srf	DUSP6	MAPK phosphatase
+plasticity_adhesion	CTNNB1	beta-catenin Wnt effector
+plasticity_adhesion	YAP1	Hippo effector
+plasticity_adhesion	WWTR1	TAZ Hippo effector
+plasticity_adhesion	TEAD1	TEAD YAP partner
+plasticity_adhesion	TEAD4	TEAD YAP partner
+plasticity_adhesion	TCF7L2	Wnt TF
+plasticity_adhesion	TCF7	Wnt TF
+plasticity_adhesion	LEF1	Wnt TF
+plasticity_adhesion	SMAD2	TGF-beta signal
+plasticity_adhesion	SMAD3	TGF-beta signal
+plasticity_adhesion	SMAD4	TGF-beta co-SMAD
+plasticity_adhesion	SMAD7	TGF-beta inhibitor
+plasticity_adhesion	SOX2	pluripotency TF
+plasticity_adhesion	SOX4	developmental TF
+plasticity_adhesion	SOX9	developmental TF
+plasticity_adhesion	GLI1	Hedgehog effector
+plasticity_adhesion	GLI2	Hedgehog effector
+plasticity_adhesion	HES1	Notch effector
+plasticity_adhesion	RBPJ	Notch transcription factor
+plasticity_adhesion	SNAI1	EMT master
+plasticity_adhesion	SNAI2	SLUG EMT
+plasticity_adhesion	CTGF	YAP/TEAD target CCN2
+plasticity_adhesion	CYR61	YAP/TEAD target CCN1
+plasticity_adhesion	ANKRD1	YAP/TEAP target
+plasticity_adhesion	PTK2	FAK adhesion kinase
+plasticity_adhesion	PXN	paxillin adhesion
+plasticity_adhesion	VIM	vimentin mesenchymal
+plasticity_adhesion	FN1	fibronectin ECM
+plasticity_adhesion	CDH1	E-cadherin epithelial
+plasticity_adhesion	CDH2	N-cadherin mesenchymal
+plasticity_adhesion	ZEB1	EMT TF
+plasticity_adhesion	ZEB2	EMT TF
+plasticity_adhesion	TWIST1	EMT TF
+plasticity_adhesion	CD44	stemness adhesion receptor
+inflammatory_stat_nfkb	NFKB1	NF-kB p50
+inflammatory_stat_nfkb	NFKB2	NF-kB p52
+inflammatory_stat_nfkb	RELA	NF-kB p65
+inflammatory_stat_nfkb	RELB	NF-kB
+inflammatory_stat_nfkb	REL	NF-kB c-Rel
+inflammatory_stat_nfkb	STAT1	type-I/II IFN signal
+inflammatory_stat_nfkb	STAT2	type-I IFN signal
+inflammatory_stat_nfkb	STAT3	IL-6 / oncogenic STAT
+inflammatory_stat_nfkb	STAT5B	cytokine STAT
+inflammatory_stat_nfkb	STAT6	IL-4/IL-13 STAT
+inflammatory_stat_nfkb	IRF1	type-II IFN effector
+inflammatory_stat_nfkb	IRF3	type-I IFN
+inflammatory_stat_nfkb	IRF7	type-I IFN
+inflammatory_stat_nfkb	IRF9	ISGF3 component
+inflammatory_stat_nfkb	CEBPB	C/EBPbeta inflammatory
+inflammatory_stat_nfkb	CEBPD	C/EBPdelta inflammatory
+inflammatory_stat_nfkb	CEBPG	C/EBPgamma
+inflammatory_stat_nfkb	NFKBIA	I-kB alpha inhibitor
+inflammatory_stat_nfkb	TNFAIP3	A20 NF-kB terminator
+inflammatory_stat_nfkb	SOCS1	cytokine signal suppressor
+inflammatory_stat_nfkb	SOCS3	cytokine signal suppressor
+inflammatory_stat_nfkb	CXCL8	IL-8 chemokine
+inflammatory_stat_nfkb	CXCL10	CXCL10 chemokine
+inflammatory_stat_nfkb	IL6	IL-6 cytokine
+inflammatory_stat_nfkb	BIRC3	IAP NF-kB target
+inflammatory_stat_nfkb	ICAM1	ICAM-1 adhesion
+inflammatory_stat_nfkb	IFIT1	ISG
+inflammatory_stat_nfkb	ISG15	ISG
+inflammatory_stat_nfkb	MX1	ISG
+isr_upr_proteostasis	ATF3	ISR/ATF family
+isr_upr_proteostasis	ATF4	ISR master activator
+isr_upr_proteostasis	ATF5	ISR/UPR TF
+isr_upr_proteostasis	ATF6	UPR ER sensor TF
+isr_upr_proteostasis	DDIT3	CHOP ISR effector
+isr_upr_proteostasis	ASNS	asparagine synthetase ISR
+isr_upr_proteostasis	DDIT4	REDD1 stress
+isr_upr_proteostasis	PPP1R15A	GADD34 ISR
+isr_upr_proteostasis	XBP1	IRE1 UPR TF
+isr_upr_proteostasis	HSPA5	GRP78/BiP UPR chaperone
+isr_upr_proteostasis	DNAJB9	ERdj4 UPR
+isr_upr_proteostasis	NFE2L2	NRF2 oxidative stress
+isr_upr_proteostasis	NQO1	NRF2 target
+isr_upr_proteostasis	HMOX1	heme oxygenase NRF2
+isr_upr_proteostasis	TFEB	lysosome biogenesis TF
+isr_upr_proteostasis	TFE3	lysosome biogenesis TF
+isr_upr_proteostasis	HSP90AA1	HSP90 chaperone
+isr_upr_proteostasis	EIF2AK3	PERK ER sensor
+isr_upr_proteostasis	ERN1	IRE1 ER sensor
+isr_upr_proteostasis	TRIB3	tribbles ISR effector
+metabolism	HIF1A	HIF-1alpha hypoxia
+metabolism	EPAS1	HIF-2alpha hypoxia
+metabolism	ARNT	HIF beta partner
+metabolism	AHR	aryl hydrocarbon receptor
+metabolism	CYP1A1	AHR target
+metabolism	CYP1B1	AHR target
+metabolism	VEGFA	HIF target angiogenesis
+metabolism	SLC2A1	GLUT1 glucose transport
+metabolism	SLC2A3	GLUT3 glucose transport
+metabolism	LDHA	glycolytic enzyme
+metabolism	SREBF1	SREBP-1 lipogenesis TF
+metabolism	SREBF2	SREBP-2 cholesterol TF
+metabolism	HMGCR	cholesterol synthesis
+metabolism	LDLR	LDL receptor
+metabolism	FASN	fatty acid synthase
+metabolism	SCD	stearoyl-CoA desaturase
+metabolism	PPARA	PPAR-alpha fatty acid oxidation
+metabolism	PPARD	PPAR-delta fatty acid oxidation
+metabolism	PPARG	PPAR-gamma adipogenesis
+metabolism	CPT1A	carnitine shuttle
+metabolism	ACOX1	peroxisomal beta-oxidation
+metabolism	CD36	fatty acid uptake
+metabolism	GLS	glutaminase
+metabolism	PKM	pyruvate kinase muscle
+metabolism	ACLY	ACL citrate lyase lipogenesis
+metabolism	ACACA	ACC fatty acid synthesis
