@@ -122,7 +122,7 @@ module AGS
 
     keys = tsv.column(field).to_single.sort_by{|k,v| v.to_f.abs }.reverse
 
-    keys[0..max.to_i].collect{|k,v| k }
+    keys[0..max.to_i-1].collect{|k,v| k }
   end
 
   dep :list_tfs

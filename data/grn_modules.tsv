@@ -1,4 +1,5 @@
-Module	Gene	Comment
+#: :type=:double
+#Module	Gene	Comment
 checkpoint_arrest	CDKN1A	p21 cell-cycle arrest
 checkpoint_arrest	CDKN1B	p27 Kip1 arrest
 checkpoint_arrest	GADD45A	DNA damage response arrest

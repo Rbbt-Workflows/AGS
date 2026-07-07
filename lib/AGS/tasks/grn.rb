@@ -54,7 +54,6 @@ module AGS
                 break
               end
             end
-            iii [changes, time_point] if direction.nil?
             tgs[tg] = direction
             edges[[tf, tg]*'~'] = weight.to_i
           end
@@ -86,18 +85,7 @@ module AGS
   end
 
   helper :grn_load_modules do
-    modules_tsv = Rbbt.data["grn_modules.tsv"].tsv
-    modules = {}
-    modules_tsv.each do |mod, values|
-      next if mod == "Module"
-      genes = values[0]
-      next if genes.nil?
-      genes = [genes] unless Array === genes
-      genes.each do |gene|
-        (modules[mod] ||= []) << gene
-      end
-    end
-    modules
+    Rbbt.data["grn_modules.tsv"].tsv type: :flat, fields: ["Gene"]
   end
 
   helper :grn_gene_modules do |modules|
@@ -1177,4 +1165,377 @@ module AGS
     result
   end
 
+  helper :grn_treatment_targets do |treatment|
+    target_map = {
+      "FiveZ" => %w(MAP3K7),
+      "PD" => %w(MAP2K1 MAP2K2),
+      "PI" => %w(PIK3CA PIK3CB PIK3CG PIK3R1),
+      "INT_PD_PI" => %w(PIK3CA PIK3CB PIK3CG PIK3R1 MAP2K1 MAP2K2),
+      "INT_FiveZ_PI" => %w(PIK3CA PIK3CB PIK3CG PIK3R1 MAP3K7),
+      "DMSO" => []
+    }
+    target_map[treatment.to_s] || []
+  end
+
+  helper :grn_signor_effect_sign do |effect|
+    effect = effect.to_s.downcase
+    return -1 if effect.include?("down-regulates") || effect.include?("decreases") || effect.include?("inhibits")
+    return 1 if effect.include?("up-regulates") || effect.include?("increases") || effect.include?("activates")
+    nil
+  end
+
+  helper :grn_signor_edge_info do |index, pair|
+    raw = index[pair]
+    info = {}
+    if raw.respond_to?(:fields) && raw.respond_to?(:[])
+      raw.fields.each do |field|
+        value = raw[field]
+        value = value.first if Array === value && value.length == 1
+        info[field] = value
+      end
+    elsif Hash === raw
+      info = raw
+    end
+    info
+  end
+
+  helper :grn_signor_out_edges do |index, source|
+    matches = index.match(source)
+    out = []
+    matches.each do |pair|
+      src, tgt = pair.split("~")
+      next unless src == source && tgt && !tgt.empty?
+      info = grn_signor_edge_info(index, pair)
+      effect = info["Effect"] || info[:Effect]
+      sign = grn_signor_effect_sign(effect)
+      next if sign.nil?
+      mechanism = info["Mechanism"] || info[:Mechanism]
+      residue = info["Residue"] || info[:Residue]
+      out << {
+        :pair => pair,
+        :source => src,
+        :target => tgt,
+        :sign => sign,
+        :effect => effect.to_s,
+        :mechanism => mechanism.to_s,
+        :residue => residue.to_s
+      }
+    end
+    out
+  end
+
+  helper :grn_selected_module_genes do |modules, module_filter|
+    module_filter = module_filter.to_s
+    selected_modules = if module_filter.nil? || module_filter.empty? || module_filter == "all"
+                         modules.keys.sort
+                       else
+                         module_filter.split(/[,;\s]+/).select { |m| modules.key?(m) }
+                       end
+    selected_genes = Set.new
+    selected_modules.each { |mod| modules[mod].each { |g| selected_genes << g } }
+    [selected_modules, selected_genes]
+  end
+
+  helper :grn_module_driver_tfs do |grn, selected_genes|
+    tfs = grn[:tfs]
+    driver_tfs = Set.new
+    grn[:edges].each do |edge_key, _sign|
+      tf, tg = edge_key.split("~")
+      next unless tf && tg
+      next unless selected_genes.include?(tg)
+      next unless tfs.key?(tf)
+      driver_tfs << tf
+    end
+    driver_tfs
+  end
+
+
+  #{{{ GRN SIGNOR BRIDGES
+
+  dep :grns, jobname: 'Default'
+  input :treatment, :select, "Treatment", nil, :select_options => TREATMENTS, :required => true
+  input :time_point, :select, "Timepoint", nil, :select_options => TIME_POINTS, :required => true
+  input :module_filter, :string, "Optional module name, or 'all'", "all"
+  input :max_len, :integer, "Maximum SIGNOR path length", 3
+  input :max_paths, :integer, "Maximum bridge paths to return", 1000
+  task :grn_signor_bridges => :tsv do |treatment, time_point, module_filter, max_len, max_paths|
+    grn = grn_load_json(treatment, time_point)
+    modules = grn_load_modules
+    gene_modules = grn_gene_modules(modules)
+    selected_modules, selected_genes = grn_selected_module_genes(modules, module_filter)
+    active_tfs = grn[:tfs]
+    target_driver_tfs = module_filter.to_s == "all" ? Set.new(active_tfs.keys) : grn_module_driver_tfs(grn, selected_genes)
+
+    max_len = max_len.to_i
+    max_len = 3 if max_len <= 0
+    max_paths = max_paths.to_i
+    max_paths = 1000 if max_paths <= 0
+
+    drug_targets = grn_treatment_targets(treatment)
+    kb = gene_kb
+    signor = kb.get_index 'Signor'
+
+    fields = %w(
+      Drug_target TF TF_activity TF_modules Selected_modules Path_length
+      Target_activation_sign Inhibitor_expected_sign Observed_TF_sign Agreement
+      Path Effects Mechanisms Residues Score Interpretation_hint
+    )
+    result = TSV.setup({}, :key_field => "Bridge", :fields => fields, :type => :list)
+
+    bridges = []
+    drug_targets.each do |drug_target|
+      # Each path stores nodes, cumulative target-activation sign, and edge annotations.
+      queue = [[drug_target, [drug_target], 1, [], [], []]]
+      until queue.empty?
+        current, nodes, cumulative_sign, effects, mechanisms, residues = queue.shift
+        depth = nodes.length - 1
+        next if depth >= max_len
+
+        grn_signor_out_edges(signor, current).each do |edge|
+          nxt = edge[:target]
+          next if nodes.include?(nxt)
+          new_nodes = nodes + [nxt]
+          new_sign = cumulative_sign * edge[:sign]
+          new_effects = effects + [edge[:effect]]
+          new_mechanisms = mechanisms + [edge[:mechanism]]
+          new_residues = residues + [edge[:residue]]
+          new_depth = new_nodes.length - 1
+
+          if target_driver_tfs.include?(nxt)
+            tf_activity = active_tfs[nxt].to_f
+            observed_sign = tf_activity > 0 ? 1 : -1
+            inhibitor_expected = -1 * new_sign
+            agreement = observed_sign == inhibitor_expected ? "match" : "mismatch"
+            # Shorter paths, matching signs and larger TF activity rank higher.
+            score = tf_activity.abs + (agreement == "match" ? 5.0 : 0.0) + (max_len - new_depth + 1)
+            hint = if agreement == "match"
+                     "Inhibition of #{drug_target} predicts #{nxt} #{inhibitor_expected > 0 ? 'activation' : 'repression'}, matching GRN TF activity."
+                   else
+                     "SIGNOR path predicts #{nxt} #{inhibitor_expected > 0 ? 'activation' : 'repression'}, but GRN TF activity has opposite sign."
+                   end
+            bridges << [score, drug_target, nxt, [
+              drug_target,
+              nxt,
+              tf_activity.round(4).to_s,
+              (gene_modules[nxt] || []) * ",",
+              selected_modules * ",",
+              new_depth.to_s,
+              new_sign.to_s,
+              inhibitor_expected.to_s,
+              observed_sign.to_s,
+              agreement,
+              new_nodes * "->",
+              new_effects * "|",
+              new_mechanisms * "|",
+              new_residues * "|",
+              score.round(4).to_s,
+              hint
+            ]]
+          end
+
+          queue << [nxt, new_nodes, new_sign, new_effects, new_mechanisms, new_residues] if new_depth < max_len
+        end
+      end
+    end
+
+    bridges.sort_by { |score, _drug_target, _tf, _values| -score }.first(max_paths).each_with_index do |(_score, drug_target, tf, values), i|
+      result[[i + 1, drug_target, tf] * "~"] = values
+    end
+
+    result
+  end
+
+
+  #{{{ GRN CORE STORY
+
+  dep :grns, jobname: 'Default'
+  input :latch_treatment, :select, "Latch / durable-suppression treatment", "INT_PD_PI", :select_options => TREATMENTS, :required => true
+  input :escape_treatment, :select, "Escape / rebound-prone treatment", "INT_FiveZ_PI", :select_options => TREATMENTS, :required => true
+  input :time_point, :select, "Timepoint to summarize", 8, :select_options => TIME_POINTS, :required => true
+  input :max_edges_per_module, :integer, "Maximum coherent GRN edges per module/context", 12
+  input :max_signor_paths, :integer, "Maximum SIGNOR bridge paths to include", 30
+  task :grn_core_story => :string do |latch_treatment, escape_treatment, time_point, max_edges_per_module, max_signor_paths|
+    max_edges_per_module = max_edges_per_module.to_i
+    max_edges_per_module = 12 if max_edges_per_module <= 0
+    max_signor_paths = max_signor_paths.to_i
+    max_signor_paths = 30 if max_signor_paths <= 0
+
+    modules = grn_load_modules
+    gene_modules = grn_gene_modules(modules)
+    latch_modules = %w(replication_licensing mitotic_execution myc_e2f_foxm1 checkpoint_arrest)
+    escape_modules = %w(ap1_ets_srf plasticity_adhesion inflammatory_stat_nfkb isr_upr_proteostasis)
+
+    contexts = {
+      "latch" => {
+        :treatment => latch_treatment,
+        :grn => grn_load_json(latch_treatment, time_point),
+        :modules => latch_modules
+      },
+      "escape" => {
+        :treatment => escape_treatment,
+        :grn => grn_load_json(escape_treatment, time_point),
+        :modules => escape_modules
+      }
+    }
+
+    nodes = {}
+    grn_edges = []
+
+    add_node = lambda do |gene, role, context_name, grn|
+      nodes[gene] ||= {
+        :id => gene,
+        :roles => [],
+        :modules => gene_modules[gene] || [],
+        :tf_activity => {},
+        :tg_direction => {},
+        :contexts => []
+      }
+      nodes[gene][:roles] << role unless nodes[gene][:roles].include?(role)
+      nodes[gene][:contexts] << context_name unless nodes[gene][:contexts].include?(context_name)
+      nodes[gene][:tf_activity][context_name] = grn[:tfs][gene].to_f.round(4) if grn[:tfs].key?(gene)
+      nodes[gene][:tg_direction][context_name] = grn[:tgs][gene] if grn[:tgs].key?(gene)
+    end
+
+    contexts.each do |context_name, info|
+      grn = info[:grn]
+      info[:modules].each do |mod|
+        next unless modules.key?(mod)
+        mod_genes = Set.new(modules[mod])
+        candidates = []
+        grn[:edges].each do |edge_key, sign|
+          tf, tg = edge_key.split("~")
+          next unless tf && tg
+          next unless mod_genes.include?(tg)
+          next unless grn[:tfs].key?(tf)
+          next unless grn[:tgs].key?(tg)
+          pressure = grn[:tfs][tf].to_f * sign.to_i
+          next unless grn_coherent?(pressure, grn[:tgs][tg])
+          score = pressure.abs
+          # Emphasize the two intended story axes.
+          score += 3.0 if context_name == "latch" && %w(replication_licensing mitotic_execution).include?(mod)
+          score += 3.0 if context_name == "escape" && %w(ap1_ets_srf plasticity_adhesion).include?(mod)
+          score += 1.0 if gene_modules[tf] && !(gene_modules[tf] & info[:modules]).empty?
+          candidates << [score, tf, tg, sign.to_i, pressure, grn[:tgs][tg], mod]
+        end
+
+        candidates.sort_by { |score, _tf, _tg, _sign, _pressure, _dir, _mod| -score }.first(max_edges_per_module).each do |score, tf, tg, sign, pressure, direction, edge_module|
+          add_node.call(tf, "TF", context_name, grn)
+          add_node.call(tg, "TG", context_name, grn)
+          grn_edges << {
+            :type => "GRN",
+            :context => context_name,
+            :treatment => info[:treatment],
+            :time_point => time_point,
+            :source => tf,
+            :target => tg,
+            :module => edge_module,
+            :sign => sign,
+            :tf_activity => grn[:tfs][tf].to_f.round(4),
+            :target_direction => direction,
+            :pressure => pressure.round(4),
+            :score => score.round(4)
+          }
+        end
+      end
+    end
+
+    # Add drug target nodes.
+    contexts.each do |context_name, info|
+      grn_treatment_targets(info[:treatment]).each do |drug_target|
+        nodes[drug_target] ||= {
+          :id => drug_target,
+          :roles => [],
+          :modules => gene_modules[drug_target] || [],
+          :tf_activity => {},
+          :tg_direction => {},
+          :contexts => []
+        }
+        nodes[drug_target][:roles] << "drug_target" unless nodes[drug_target][:roles].include?("drug_target")
+        nodes[drug_target][:contexts] << context_name unless nodes[drug_target][:contexts].include?(context_name)
+      end
+    end
+
+    # SIGNOR bridge paths from drug targets to selected TF nodes.
+    selected_tfs = Set.new(nodes.values.select { |n| n[:roles].include?("TF") }.collect { |n| n[:id] })
+    signor_edges = []
+    begin
+      signor = gene_kb.get_index 'Signor'
+      contexts.each do |context_name, info|
+        drug_targets = grn_treatment_targets(info[:treatment])
+        grn = info[:grn]
+        bridges = []
+        drug_targets.each do |drug_target|
+          queue = [[drug_target, [drug_target], 1, [], [], []]]
+          until queue.empty?
+            current, path_nodes, cumulative_sign, effects, mechanisms, residues = queue.shift
+            depth = path_nodes.length - 1
+            next if depth >= 3
+            grn_signor_out_edges(signor, current).each do |edge|
+              nxt = edge[:target]
+              next if path_nodes.include?(nxt)
+              new_nodes = path_nodes + [nxt]
+              new_sign = cumulative_sign * edge[:sign]
+              new_effects = effects + [edge[:effect]]
+              new_mechanisms = mechanisms + [edge[:mechanism]]
+              new_residues = residues + [edge[:residue]]
+              new_depth = new_nodes.length - 1
+              if selected_tfs.include?(nxt) && grn[:tfs].key?(nxt)
+                tf_activity = grn[:tfs][nxt].to_f
+                observed_sign = tf_activity > 0 ? 1 : -1
+                inhibitor_expected = -1 * new_sign
+                agreement = observed_sign == inhibitor_expected ? "match" : "mismatch"
+                score = tf_activity.abs + (agreement == "match" ? 5.0 : 0.0) + (4 - new_depth)
+                bridges << [score, {
+                  :type => "SIGNOR_bridge",
+                  :context => context_name,
+                  :treatment => info[:treatment],
+                  :drug_target => drug_target,
+                  :target_tf => nxt,
+                  :path => new_nodes,
+                  :path_length => new_depth,
+                  :target_activation_sign => new_sign,
+                  :inhibitor_expected_sign => inhibitor_expected,
+                  :observed_tf_sign => observed_sign,
+                  :agreement => agreement,
+                  :tf_activity => tf_activity.round(4),
+                  :effects => new_effects,
+                  :mechanisms => new_mechanisms,
+                  :residues => new_residues,
+                  :score => score.round(4)
+                }]
+              end
+              queue << [nxt, new_nodes, new_sign, new_effects, new_mechanisms, new_residues] if new_depth < 3
+            end
+          end
+        end
+        signor_edges.concat bridges.sort_by { |score, _edge| -score }.first(max_signor_paths).collect { |_score, edge| edge }
+      end
+    rescue Exception => e
+      signor_edges << {:type => "SIGNOR_bridge_error", :message => e.message}
+    end
+
+    # A compact summary for immediate inspection.
+    summary = {
+      :time_point => time_point,
+      :latch_treatment => latch_treatment,
+      :escape_treatment => escape_treatment,
+      :latch_modules => latch_modules,
+      :escape_modules => escape_modules,
+      :node_count => nodes.length,
+      :grn_edge_count => grn_edges.length,
+      :signor_bridge_count => signor_edges.length,
+      :interpretation => "Core story graph contrasts a durable INT_PD_PI-like replication/mitotic latch with an INT_FiveZ_PI-like AP1/plasticity escape-priming state."
+    }
+
+    JSON.pretty_generate({
+      :summary => summary,
+      :nodes => nodes.values,
+      :edges => grn_edges + signor_edges
+    })
+  end
+
+
+  helper :gene_kb do
+    KnowledgeBase.new Scout.var.Agent.Gene.knowledge_base
+  end
 end

@@ -225,7 +225,6 @@ AGS=/$PWD filter="*.rb *.rake Rakefile *.rdoc *.R *.sh *.js *.haml *.sass *.txt 
 
    ai_interpretation-v2-mechanisms.benchmark
 
-
    proteomics_benchmark
 
    ai_interpretation.v2-mechanisms.image.rb
@@ -241,18 +240,29 @@ AGS=/$PWD filter="*.rb *.rake Rakefile *.rdoc *.R *.sh *.js *.haml *.sass *.txt 
    ai_interpretation-v3.mechanisms.benchmark_creation
    ai_interpretation-v3.mechanisms.benchmark_results
 
-   checks_prots
+   ai_interpretation-v3.mechanisms.pdpi
 
    ai_chapters
    ai_chapters.image.rb
+   ai_chapters-v2
+
+			for_alfonso
+			for_alfonso.image.rb
 
    neko_benchmark
 
    compact_NAR
 
    NAR_style
+
+   grns
+
+   grns.session.glm.1
+   grns.session.glm.2
+   grns.session.glm.2.image.rb
   }
 
+  back2back
  }
 
  paper=paper filter="*"{
@@ -341,6 +351,8 @@ AGS=/$PWD filter="*.rb *.rake Rakefile *.rdoc *.R *.sh *.js *.haml *.sass *.txt 
    }
 
    mcp.rb
+
+   grn.rb
 
    freeze.rb
 
