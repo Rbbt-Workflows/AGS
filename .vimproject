@@ -240,7 +240,16 @@ AGS=/$PWD filter="*.rb *.rake Rakefile *.rdoc *.R *.sh *.js *.haml *.sass *.txt 
    ai_interpretation-v3.mechanisms.benchmark_creation
    ai_interpretation-v3.mechanisms.benchmark_results
 
+   ai_interpretation-v3.mechanisms.grn
+
    ai_interpretation-v3.mechanisms.pdpi
+
+   ai_interpretation-v3.mechanisms.pdpi.asmund
+
+   ai_interpretation-v3.mechanisms.pdpi.nogrn
+   ai_interpretation-v3.mechanisms.pdpi.grns
+   ai_interpretation-v3.mechanisms.pdpi.extended
+
 
    ai_chapters
    ai_chapters.image.rb
@@ -260,40 +269,44 @@ AGS=/$PWD filter="*.rb *.rake Rakefile *.rdoc *.R *.sh *.js *.haml *.sass *.txt 
    grns.session.glm.1
    grns.session.glm.2
    grns.session.glm.2.image.rb
+
+   grns.session.glm.agnostic
   }
 
   back2back
  }
 
  paper=paper filter="*"{
-  discussion_draft_17062026.docx
-  discussion_draft_17062026.md
-  methods_draft_01062026.md
-  methods_draft_17062026.docx
-  methods_draft_17062026.md
+  ai_benchmark.md
+  ai_benchmark_creation.md
+  ai_mechanisms.md
+  ai_themes.md
+  chronology.tsv
+  chronology.xlsx
+  grn_analysis.md
+  grn_core_story_T8.dot
+  grn_core_story_T8.edges.tsv
+  grn_core_story_T8.json
+  grn_core_story_T8.nodes.tsv
+  grn_core_story_T8.svg
+  grn_intermediate_findings.md
   methods_main_nar.md
   methods_supplementary_nar.md
-  proteomics_validation_of_mechanistic_themes.md
+  ptm_prediction_evaluation.md
+  references-v23062026.md
   references_methods.md
   results_data_guide.md
-  results_draft-16062026.docx
-  results_draft-16062026.md
-  results_draft.md
-  results_draft_17062026.docx
-  results_draft_17062026.md
   supplemental_DMSO.docx
   supplemental_DMSO.md
-  tf_activity_themes_actionable_mechanisms.md
-  tf_thematic_identification_step1.md
-  tf_activity_themes_actionable_mechanisms_enriched.md
-
-  ai_themes.md
-  ai_mechanisms.md
-  ai_benchmark_creation.md
-  ai_benchmark.md
-
-  main_nar_compact-v23062026.md
-  references-v23062026.md
+  grn_agnostic=grn_agnostic{
+   INT_PD_PI_T8_global_motifs.tsv
+   INT_PD_PI_vs_PI_PD_T4_T8_target_transition.tsv
+   INT_PD_PI_vs_PI_PD_T8_tf_contrast.tsv
+   README.md
+   ai_digest.md
+   target_state_signature_annotations.tsv
+   target_state_signature_modules.tsv
+  }
  }
  lib=lib {
   knowledge_base=knowledge_base{
@@ -314,8 +327,6 @@ AGS=/$PWD filter="*.rb *.rake Rakefile *.rdoc *.R *.sh *.js *.haml *.sass *.txt 
    change_starts.rb
    tf_type.rb
    gene_info.rb
-   INSPEcT=INSPEcT{
-   }
 
    regulome.rb
 
@@ -353,6 +364,10 @@ AGS=/$PWD filter="*.rb *.rake Rakefile *.rdoc *.R *.sh *.js *.haml *.sass *.txt 
    mcp.rb
 
    grn.rb
+   grn=grn{
+    prior.rb
+    agnostic.rb
+   }
 
    freeze.rb
 
@@ -361,7 +376,9 @@ AGS=/$PWD filter="*.rb *.rake Rakefile *.rdoc *.R *.sh *.js *.haml *.sass *.txt 
  }
  data=data filter="*"{
   EXTRI2-regulome_dbTFs_coTFs_230425.tsv
+  grn_modules.tsv
   noisy_genes.list
+  valid_tfs.list
   FC=FC{
    deseq2_log2foldchange_ashrshrink_outliersremoved_untreatedT0asreference_independentfiltering.txt
    deseq2_pvalue_fdradjusted_outliersremoved_untreatedT0asreference_independentfiltering.txt

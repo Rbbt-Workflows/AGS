@@ -975,6 +975,35 @@ module AGS
       matrix.each do |tf, row|
         matrix[tf] = row.each_with_index.collect{|v,i| sds[i] == 0 ? 0.0 : (v - means[i]) / sds[i] }
       end
+    when 'column_min_max'
+      max = []
+      min = []
+      fields.each_index do |i|
+        col = matrix.values.collect{|row| row[i] }
+        max[i] = col.max
+        min[i] = col.min.abs
+      end
+      matrix.each do |tf, row|
+        matrix[tf] = row.each_with_index.collect{|v,i| 
+          v == 0 ? 0 : (v < 0 ? v / min[i] : v / max[i])
+        }
+      end
+    when 'column_min_max_r'
+      max = []
+      min = []
+      fields.each_index do |i|
+        col = matrix.values.collect{|row| row[i] }
+        col = col.sort[3..-4]
+        max[i] = col.max
+        min[i] = col.min.abs
+      end
+      matrix.each do |tf, row|
+        matrix[tf] = row.each_with_index.collect{|v,i| 
+          v == 0 ? 0 : (v < 0 ? v / min[i] : v / max[i])
+        }
+      end
+    else
+      raise "Unknown normalization #{normalization}"
     end
 
     tsv = TSV.setup({}, :key_field => 'Associated Gene Name', :fields => fields, :type => :list, :namespace => AGS.organism)

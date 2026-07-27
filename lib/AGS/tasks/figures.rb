@@ -684,7 +684,7 @@ RCODE
   input :max_abs, :float, 'Maximum absolute value for color scale', 3.0
   input :cluster_columns, :boolean, 'Cluster columns and show column dendrogram', false
   input :show_tf_labels, :boolean, 'Show TF labels', true
-  dep :tf_activity_heatmap_matrix, :scheme => :placeholder, :normalization => :placeholder do |jobname, options|
+  dep :tf_activity_heatmap_matrix do |jobname, options|
     { :scheme => options[:scheme], :normalization => options[:normalization] }
   end
   extension :svg
@@ -695,7 +695,7 @@ RCODE
     dendrogram = cluster_columns ? 'both' : 'row'
     colv = cluster_columns ? 'TRUE' : 'FALSE'
     labrow = show_tf_labels ? 'rownames(mat)' : 'rep("", nrow(mat))'
-    figure_base(data_tsv, <<-RCODE, 12, 10)
+    figure_base(data_tsv, <<-RCODE, 12, 70)
 rbbt.require('gplots')
 mat <- data[, c(#{fields.collect{|f| "'#{f}'"} * ', '}), drop=FALSE]
 mat[] <- lapply(mat, as.numeric)
@@ -708,6 +708,7 @@ colnames(mat) <- gsub('INT_FiveZ_PI', '5Z+PI', colnames(mat))
 colnames(mat) <- gsub('INT_PD_PI', 'PD+PI', colnames(mat))
 colnames(mat) <- gsub('FiveZ', '5Z', colnames(mat))
 heatmap.2(mat, trace='none', col=colorRampPalette(c('#4575B4','white','#D73027'))(101),
+          key=FALSE, lhei=c(1,16),
           dendrogram='#{dendrogram}', Colv=#{colv}, density.info='none', key.title='activity',
           symbreaks=FALSE, labRow=#{labrow}, margins=c(9,4), cexCol=0.65, cexRow=0.35)
 RCODE

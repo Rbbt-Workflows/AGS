@@ -70,12 +70,15 @@ module AGS
   dep :combination_tf_category_counts
   dep :functional_enrichment_suite
   dep :proteomics_prediction_suite
+  dep :grns
   task :freeze => :array do
     dependencies.each do |dep|
       other = dependencies.select{|d| d.task_name == dep.task_name }.length > 1
       filename = case dep.task_name
                  when :functional_enrichment_suite
                    Open.cp dep.files_dir, file("functional_enrichment_suite")
+                 when :grns
+                   Open.cp dep.files_dir, file("grns")
                  when :proteomics_prediction_suite
                    Open.cp dep.files_dir, file("proteomics_prediction_suite")
                  when :valid_TFs

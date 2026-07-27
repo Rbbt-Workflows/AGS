@@ -216,4 +216,7 @@ module AGS
 
     tsv
   end
+
+  # Remove T1 to T1, allow T1 to T4, T1 and T2 need not be self-consistent, it
+  # cand end on T8, and threshold at 3.0
 end
