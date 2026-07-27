@@ -217,6 +217,145 @@ module AGS
     tsv
   end
 
-  # Remove T1 to T1, allow T1 to T4, T1 and T2 need not be self-consistent, it
-  # cand end on T8, and threshold at 3.0
+  desc "Extract relevant chained TF activation sequences by filtering pairwise events (eligible pairs, self-consistency, activity cutoff) and walking backward from T24 through T8, T4, T2, T1"
+  dep :sequence
+  input :activity_cutoff, :float, "Minimum absolute activity for both source and target TFs", 3.0
+  input :exclude_same_timepoint, :boolean, "Exclude T2-T2 and T4-T4 self-sustaining links (consider to not use)", true
+  input :include_orphan_targets, :boolean, "Add orphan targets at each stage that have no downstream link", false
+  input :include_t1_sources, :boolean, "Include T1 TF sources (optional early layer)", false
+  input :broad_mode, :boolean, "Keep all activity values; annotate pass/fail instead of hard cutoff filter", false
+  task :chained_sequences => :tsv do |activity_cutoff, exclude_same_timepoint, include_orphan_targets, include_t1_sources, broad_mode|
+    require 'set'
+
+    seq = step(:sequence).load
+
+    # --- Eligible temporal pairs ---
+    eligible_pairs = Set.new([
+      ["T1", "T2"], ["T1", "T4"],
+      ["T2", "T2"], ["T2", "T4"],
+      ["T4", "T4"], ["T4", "T8"],
+      ["T8", "T8"], ["T8", "T24"],
+    ])
+    if exclude_same_timepoint
+      eligible_pairs.subtract([["T2", "T2"], ["T4", "T4"]])
+    end
+
+    # Helper to parse self-consistent values (stored as "true"/"false" strings)
+    sc_true = lambda { |v| v.to_s == "true" || v.to_s == "1" }
+
+    # --- Phase A: Filter individual pairwise events ---
+    filtered = []
+    seq.through do |key, values|
+      source      = values["Source"].first
+      source_tp   = values["Source timepoint"].first
+      source_act  = values["Source activity"].first.to_f
+      target      = values["Target"].first
+      target_tp   = values["Target timepoint"].first
+      target_act  = values["Target activity"].first.to_f
+      source_sc   = sc_true.call(values["Source self-consistent"].first)
+      target_sc   = sc_true.call(values["Target self-consistent"].first)
+
+      # 1. Eligible temporal pair check
+      next unless eligible_pairs.include?([source_tp, target_tp])
+
+      # 2. Self-consistency rules
+      #    Target must always be self-consistent
+      next unless target_sc
+      #    Source must be self-consistent for T4 and T8; T1 and T2 may be non-SC
+      if source_tp == "T4" || source_tp == "T8"
+        next unless source_sc
+      end
+
+      # 3. Activity cutoff (hard filter unless broad_mode)
+      passes_cutoff = source_act.abs >= activity_cutoff && target_act.abs >= activity_cutoff
+      next unless broad_mode || passes_cutoff
+
+      filtered << {
+        key: key,
+        source: source, source_tp: source_tp, source_act: source_act,
+        target: target, target_tp: target_tp, target_act: target_act,
+        source_sc: source_sc, target_sc: target_sc,
+        effect: values["Effect"].first.to_f,
+        offset: values["Offset"].first.to_i,
+        type_str: values["Type"].first,
+        passes_cutoff: passes_cutoff,
+      }
+    end
+
+    # --- Phase B: Backward-walk chain assembly ---
+    # Walk from T24 backward through T8, T4, T2.
+    # At each stage, keep only events whose target TF (at that timepoint)
+    # was already discovered as a source in a later stage.
+    # T1 sources are handled in an optional final step.
+
+    discovered = Set.new   # Set of [tf, timepoint] pairs in the chain
+    kept_keys  = Set.new
+    chain_step = {}        # key -> human-readable stage label
+
+    # Separate T1-source events (handled in optional final step)
+    non_t1      = filtered.reject { |e| e[:source_tp] == "T1" }
+    t1_events   = filtered.select { |e| e[:source_tp] == "T1" }
+
+    # Group non-T1 events by target timepoint
+    by_target_tp = {}
+    non_t1.each do |e|
+      (by_target_tp[e[:target_tp]] ||= []) << e
+    end
+
+    # Process stages from latest to earliest target timepoint
+    ["T24", "T8", "T4", "T2"].each do |stage_tp|
+      events = by_target_tp[stage_tp] || []
+      events.each do |e|
+        target_pair = [e[:target], stage_tp]
+        is_anchor   = (stage_tp == "T24")
+        is_connected = is_anchor || discovered.include?(target_pair)
+
+        if is_connected
+          kept_keys << e[:key]
+          chain_step[e[:key]] = "#{stage_tp}<-#{e[:source_tp]}"
+          discovered << [e[:source], e[:source_tp]]
+        elsif include_orphan_targets
+          # Orphan: target not connected to chain yet, but add anyway
+          kept_keys << e[:key]
+          chain_step[e[:key]] = "#{stage_tp}<-#{e[:source_tp]} (orphan)"
+          discovered << [e[:target], e[:target_tp]]
+          discovered << [e[:source], e[:source_tp]]
+        end
+      end
+    end
+
+    # Optional: T1 source layer
+    # T1 events have target at T2 or T4 (from eligible pairs).
+    # Include only those whose target is already in the discovered chain.
+    if include_t1_sources
+      t1_events.each do |e|
+        target_pair = [e[:target], e[:target_tp]]
+        if discovered.include?(target_pair)
+          kept_keys << e[:key]
+          chain_step[e[:key]] = "#{e[:target_tp]}<-T1"
+        end
+      end
+    end
+
+    # --- Build output TSV ---
+    out_fields = seq.fields.dup + ["Chain step"]
+    out_fields << "Passes cutoff" if broad_mode
+
+    result = TSV.setup({}, key_field: "ID", fields: out_fields, type: :list)
+
+    filtered.each do |e|
+      next unless kept_keys.include?(e[:key])
+      row = [
+        e[:source], e[:source_tp], e[:source_act],
+        e[:target], e[:target_tp], e[:target_act],
+        e[:effect], e[:offset], e[:type_str],
+        e[:source_sc], e[:target_sc],
+        chain_step[e[:key]],
+      ]
+      row << e[:passes_cutoff] if broad_mode
+      result[e[:key]] = row
+    end
+
+    result
+  end
 end

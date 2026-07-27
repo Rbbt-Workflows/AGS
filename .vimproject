@@ -274,6 +274,8 @@ AGS=/$PWD filter="*.rb *.rake Rakefile *.rdoc *.R *.sh *.js *.haml *.sass *.txt 
   }
 
   back2back
+
+  sequences
  }
 
  paper=paper filter="*"{
