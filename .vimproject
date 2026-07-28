@@ -250,6 +250,8 @@ AGS=/$PWD filter="*.rb *.rake Rakefile *.rdoc *.R *.sh *.js *.haml *.sass *.txt 
    ai_interpretation-v3.mechanisms.pdpi.grns
    ai_interpretation-v3.mechanisms.pdpi.extended
 
+   ai_interpretation-v4.themes
+   ai_interpretation-v4.mechanims
 
    ai_chapters
    ai_chapters.image.rb
@@ -350,8 +352,6 @@ AGS=/$PWD filter="*.rb *.rake Rakefile *.rdoc *.R *.sh *.js *.haml *.sass *.txt 
 
    adhoc.rb
 
-   sequence.rb
-
    rule_variants.rb
 
    proteomics.rb
@@ -374,6 +374,10 @@ AGS=/$PWD filter="*.rb *.rake Rakefile *.rdoc *.R *.sh *.js *.haml *.sass *.txt 
    freeze.rb
 
    figures.rb
+
+   sequence.rb
+
+   network.rb
   }
  }
  data=data filter="*"{

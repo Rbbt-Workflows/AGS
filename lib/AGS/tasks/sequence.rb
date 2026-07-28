@@ -70,6 +70,7 @@ module AGS
   dep :treatment_tf_consistency, remove_consecutive: false
   dep :regulome
   task :sequence => :tsv do
+    treatment = recursive_inputs[:treatment]
     treatment_tfs = step(:treatment_tfs).load
     treatment_tfs.fields = treatment_tfs.fields.collect{|f| f.split('-').last }
 
@@ -188,7 +189,7 @@ module AGS
             type = (offset==0 ? "sustained/coincident" : "delay_#{offset}")
 
             values = [tf_a, tp, tf_a_activity, tf_b, tp_b, tf_b_activity, effect, offset, type, sc_ok_a, sc_ok]
-            key = Misc.digest(values)
+            key = treatment + '-' + Misc.digest(values)
             tf_events[key] = values
           end
         end
@@ -218,7 +219,7 @@ module AGS
   end
 
   desc "Extract relevant chained TF activation sequences by filtering pairwise events (eligible pairs, self-consistency, activity cutoff) and walking backward from T24 through T8, T4, T2, T1"
-  dep :sequence
+  dep :sequence, jobname: 'Default'
   input :activity_cutoff, :float, "Minimum absolute activity for both source and target TFs", 3.0
   input :exclude_same_timepoint, :boolean, "Exclude T2-T2 and T4-T4 self-sustaining links (consider to not use)", true
   input :include_orphan_targets, :boolean, "Add orphan targets at each stage that have no downstream link", false

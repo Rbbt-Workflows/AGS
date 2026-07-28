@@ -314,6 +314,8 @@ require 'AGS/tasks/proteomics'
 
 require 'AGS/tasks/grn'
 
+require 'AGS/tasks/network'
+
 #require 'AGS/tasks/benchmarks'
 require 'knowledge_base/AGS'
 #require 'rbbt/entity/AGS'
