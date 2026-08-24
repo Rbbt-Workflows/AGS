@@ -233,6 +233,8 @@ AGS=/$PWD filter="*.rb *.rake Rakefile *.rdoc *.R *.sh *.js *.haml *.sass *.txt 
 
    synergy
 
+   ttt
+
    ai_interpretation-v3.themes
    ai_interpretation-v3.themes.chronology
    ai_interpretation-v3.mechanisms
@@ -251,7 +253,8 @@ AGS=/$PWD filter="*.rb *.rake Rakefile *.rdoc *.R *.sh *.js *.haml *.sass *.txt 
    ai_interpretation-v3.mechanisms.pdpi.extended
 
    ai_interpretation-v4.themes
-   ai_interpretation-v4.mechanims
+   ai_interpretation-v4.mechanisms
+   ai_interpretation-v4.mechanisms.predictions
 
    ai_chapters
    ai_chapters.image.rb
@@ -275,9 +278,24 @@ AGS=/$PWD filter="*.rb *.rake Rakefile *.rdoc *.R *.sh *.js *.haml *.sass *.txt 
    grns.session.glm.agnostic
   }
 
+  interpretation=interpretation{
+   1.overview
+   2.themes
+   3.mechanisms
+   3.mechanisms.review
+  }
+
   back2back
 
   sequences
+
+  chat_compare
+
+  cortex
+ }
+
+ interpretation=interpretation{
+  intro.md
  }
 
  paper=paper filter="*"{
@@ -378,6 +396,8 @@ AGS=/$PWD filter="*.rb *.rake Rakefile *.rdoc *.R *.sh *.js *.haml *.sass *.txt 
    sequence.rb
 
    network.rb
+
+   dag.rb
   }
  }
  data=data filter="*"{

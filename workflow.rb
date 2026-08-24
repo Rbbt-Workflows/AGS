@@ -318,6 +318,8 @@ require 'AGS/tasks/network'
 
 #require 'AGS/tasks/benchmarks'
 require 'knowledge_base/AGS'
+
+require 'AGS/tasks/dag'
 #require 'rbbt/entity/AGS'
 
 
