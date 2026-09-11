@@ -54,7 +54,7 @@ module AGS
   end
   dep :tf_activity_heatmap_matrix, scheme: :placeholder, normalization: :placeholder do |jobname,options|
     %w(dynamic non-dynamic).collect do |scheme|
-      %w(raw row_zscore column_zscore).collect do |normalization|
+      %w(raw row_zscore column_zscore column_min_max).collect do |normalization|
         options.merge(scheme: scheme, normalization: normalization)
       end
     end.flatten
@@ -73,7 +73,10 @@ module AGS
   dep :grns
   task :freeze => :array do
     dependencies.each do |dep|
-      other = dependencies.select{|d| d.task_name == dep.task_name }.length > 1
+      other = dependencies.select{|d| d.task_name == dep.task_name }.
+        select{|d| d.recursive_inputs[:treatment] && 
+               dep.recursive_inputs[:treatment] && 
+               d.recursive_inputs[:treatment] != dep.recursive_inputs[:treatment] }.any?
       filename = case dep.task_name
                  when :functional_enrichment_suite
                    Open.cp dep.files_dir, file("functional_enrichment_suite")

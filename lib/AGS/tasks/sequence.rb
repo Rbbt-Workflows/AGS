@@ -221,7 +221,7 @@ module AGS
   desc "Extract relevant chained TF activation sequences by filtering pairwise events (eligible pairs, self-consistency, activity cutoff) and walking backward from T24 through T8, T4, T2, T1"
   dep :sequence, jobname: 'Default'
   input :activity_cutoff, :float, "Minimum absolute activity for both source and target TFs", 3.0
-  input :exclude_same_timepoint, :boolean, "Exclude T2-T2 and T4-T4 self-sustaining links (consider to not use)", true
+  input :exclude_same_timepoint, :boolean, "Exclude T2-T2, T4-T4 and T8-T8 self-sustaining links (consider to not use)", true
   input :include_orphan_targets, :boolean, "Add orphan targets at each stage that have no downstream link", false
   input :include_t1_sources, :boolean, "Include T1 TF sources (optional early layer)", false
   input :broad_mode, :boolean, "Keep all activity values; annotate pass/fail instead of hard cutoff filter", false
@@ -238,7 +238,7 @@ module AGS
       ["T8", "T8"], ["T8", "T24"],
     ])
     if exclude_same_timepoint
-      eligible_pairs.subtract([["T2", "T2"], ["T4", "T4"]])
+      eligible_pairs.subtract([["T2", "T2"], ["T4", "T4"], ["T8", "T8"]])
     end
 
     # Helper to parse self-consistent values (stored as "true"/"false" strings)

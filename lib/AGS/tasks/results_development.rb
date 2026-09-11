@@ -941,7 +941,7 @@ module AGS
   end
 
   input :scheme, :select, 'TF prediction scheme to export', 'dynamic', :select_options => %w(dynamic non-dynamic)
-  input :normalization, :select, 'Matrix normalization', 'raw', :select_options => %w(raw row_zscore column_zscore)
+  input :normalization, :select, 'Matrix normalization', 'raw', :select_options => %w(raw row_zscore column_zscore column_min_max column_min_max_r)
   dep :tf_predictions, :scheme => 'dynamic'
   dep :tf_predictions, :scheme => 'non-dynamic'
   task :tf_activity_heatmap_matrix => :tsv do |scheme, normalization|
